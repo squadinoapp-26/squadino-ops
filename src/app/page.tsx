@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSession, PLATFORM_ROLE_LABELS } from "@/lib/auth";
+import { requirePlatformSession, PLATFORM_ROLE_LABELS, canManageStaff } from "@/lib/auth";
 import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
 import Link from "next/link";
@@ -40,6 +40,11 @@ export default async function OpsDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {canManageStaff(staff.role) && (
+            <Link href="/app-management" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+              App Management
+            </Link>
+          )}
           <div className="text-right">
             <p className="text-sm font-medium">{staff.name}</p>
             <p className="text-xs text-slate-400">{PLATFORM_ROLE_LABELS[staff.role] ?? staff.role}</p>
