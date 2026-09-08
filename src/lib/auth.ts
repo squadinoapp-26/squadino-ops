@@ -1,10 +1,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { prisma } from "./prisma";
 
 export const SESSION_COOKIE = "squadino_ops_session";
 const SESSION_TTL_HOURS = 12;
+
+// PlatformSession.token stores a hash, never the raw bearer value — same
+// reasoning as squadino's own Session/PlatformSession handling (they share
+// this table): a database-only compromise must not hand over ready-to-use
+// session tokens. The raw token lives only in the browser's cookie.
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 export interface PlatformSessionUser {
   id: string;
@@ -17,7 +25,7 @@ export interface PlatformSessionUser {
 export async function createPlatformSession(userId: string) {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60 * 1000);
-  await prisma.platformSession.create({ data: { token, platformUserId: userId, expiresAt } });
+  await prisma.platformSession.create({ data: { token: hashToken(token), platformUserId: userId, expiresAt } });
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -31,7 +39,7 @@ export async function createPlatformSession(userId: string) {
 export async function destroyPlatformSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (token) await prisma.platformSession.deleteMany({ where: { token } });
+  if (token) await prisma.platformSession.deleteMany({ where: { token: hashToken(token) } });
   cookieStore.delete(SESSION_COOKIE);
 }
 
@@ -41,7 +49,7 @@ export async function getPlatformSession(): Promise<PlatformSessionUser | null> 
   if (!token) return null;
 
   const session = await prisma.platformSession.findUnique({
-    where: { token },
+    where: { token: hashToken(token) },
     include: { platformUser: { select: { id: true, name: true, email: true, role: true, active: true } } },
   });
   if (!session || session.expiresAt < new Date()) return null;

@@ -498,6 +498,10 @@ model Session {
   id          String    @id @default(cuid())
   userId      String
   clubId      String
+  // A SHA-256 hash of the bearer token — the raw value lives only in the
+  // browser's cookie and is never written here (see lib/session.ts
+  // hashToken), so a database-only compromise can't be used to hijack live
+  // sessions directly.
   token       String    @unique
   expiresAt   DateTime
   agreedAt    DateTime?
@@ -553,6 +557,8 @@ model PlatformUser {
 
 model PlatformSession {
   id             String       @id @default(cuid())
+  // A SHA-256 hash of the bearer token, not the raw value — see
+  // Session.token above (same reasoning, same hashToken helper).
   token          String       @unique
   platformUserId String
   platformUser   PlatformUser @relation(fields: [platformUserId], references: [id], onDelete: Cascade)
