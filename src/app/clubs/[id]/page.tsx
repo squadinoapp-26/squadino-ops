@@ -1,29 +1,33 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManagePackages } from "@/lib/auth";
 import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import ClubPlanEditor from "./ClubPlanEditor";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePlatformSessionOrRedirect();
+  const staff = await requirePlatformSessionOrRedirect();
   const { id } = await params;
 
-  const club = await prisma.club.findUnique({
-    where: { id },
-    include: {
-      users: {
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        select: {
-          id: true, name: true, email: true, role: true, status: true, createdAt: true, lastSeenAt: true,
-          sessions: { orderBy: { createdAt: "desc" }, take: 1, select: { city: true, countryCode: true } },
+  const [club, packages] = await Promise.all([
+    prisma.club.findUnique({
+      where: { id },
+      include: {
+        users: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: {
+            id: true, name: true, email: true, role: true, status: true, createdAt: true, lastSeenAt: true,
+            sessions: { orderBy: { createdAt: "desc" }, take: 1, select: { city: true, countryCode: true } },
+          },
         },
+        _count: { select: { users: true, events: true, news: true } },
       },
-      _count: { select: { users: true, events: true, news: true } },
-    },
-  });
+    }),
+    prisma.package.findMany({ orderBy: { sortOrder: "asc" } }),
+  ]);
 
   if (!club) notFound();
 
@@ -44,6 +48,26 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ id:
           <Stat label="Events" value={club._count.events} />
           <Stat label="News Posts" value={club._count.news} />
         </div>
+
+        {canManagePackages(staff.role) ? (
+          <ClubPlanEditor
+            clubId={club.id}
+            packages={packages.map((p) => ({ id: p.id, name: p.name, userCap: p.userCap, priceCents: p.priceCents, active: p.active }))}
+            currentPackageId={club.packageId}
+            userCapOverride={club.userCapOverride}
+            userCount={club._count.users}
+          />
+        ) : (
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 flex items-center justify-between text-sm">
+            <span className="text-slate-400">
+              Plan: {packages.find((p) => p.id === club.packageId)?.name ?? "No package"}
+            </span>
+            <span className="font-semibold text-slate-200">
+              {club._count.users} / {club.userCapOverride ?? packages.find((p) => p.id === club.packageId)?.userCap ?? "unlimited"} users
+              {club.userCapOverride != null && <span className="text-blue-400 font-normal"> (override)</span>}
+            </span>
+          </div>
+        )}
 
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h2 className="font-semibold mb-4 text-slate-200">Recent Users</h2>

@@ -161,6 +161,11 @@ model Club {
   appVersion              AppVersion @default(FREE)
   packageId               String?
   package                 Package?   @relation(fields: [packageId], references: [id])
+  // Per-club exception to the assigned package's userCap — a super admin can
+  // grant (or restrict) headroom without switching the club to a different
+  // package. Null = use the package's userCap (or unlimited if package is
+  // also null/uncapped).
+  userCapOverride         Int?
   trialEndsAt             DateTime?
   stripeCustomerId        String?
   stripeSubscriptionId    String?
