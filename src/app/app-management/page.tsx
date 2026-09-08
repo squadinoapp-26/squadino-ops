@@ -1,4 +1,4 @@
-import { requirePlatformSessionOrRedirect, canManageStaff } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManageStaff, canManagePackages } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -22,6 +22,14 @@ export default async function AppManagementPage() {
             <span className="text-2xl">👥</span>
             <h2 className="font-semibold mt-3">Staff</h2>
             <p className="text-sm text-slate-400 mt-1">Add workers, assign roles, deactivate access.</p>
+          </Link>
+        )}
+        {canManagePackages(staff.role) && (
+          <Link href="/app-management/packages"
+            className="bg-slate-800 border border-slate-700 rounded-2xl p-6 hover:border-blue-600 transition-colors">
+            <span className="text-2xl">💳</span>
+            <h2 className="font-semibold mt-3">Packages</h2>
+            <p className="text-sm text-slate-400 mt-1">Create packages and set user limits and pricing.</p>
           </Link>
         )}
       </div>
