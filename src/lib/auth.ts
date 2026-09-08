@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { randomBytes } from "crypto";
 import { prisma } from "./prisma";
 
@@ -48,9 +49,23 @@ export async function getPlatformSession(): Promise<PlatformSessionUser | null> 
   return session.platformUser;
 }
 
+// For API routes: throws so the caller can turn it into a 401/403 JSON
+// response (they already wrap this in .catch()). Never call this directly
+// from a page — an uncaught throw during render surfaces as a raw runtime
+// error page instead of sending the visitor to sign in (e.g. after a
+// password reset invalidates their session mid-visit).
 export async function requirePlatformSession() {
   const user = await getPlatformSession();
   if (!user) throw new Error("Unauthorized");
+  return user;
+}
+
+// For page Server Components: redirects to /login instead of throwing, so a
+// missing/expired/invalidated session sends the visitor to sign back in
+// rather than crashing the render.
+export async function requirePlatformSessionOrRedirect() {
+  const user = await getPlatformSession();
+  if (!user) redirect("/login");
   return user;
 }
 

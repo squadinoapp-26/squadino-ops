@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSession, canManageStaff } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManageStaff } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import StaffManager from "./StaffManager";
@@ -7,7 +7,7 @@ import StaffManager from "./StaffManager";
 export const dynamic = "force-dynamic";
 
 export default async function StaffPage() {
-  const staff = await requirePlatformSession();
+  const staff = await requirePlatformSessionOrRedirect();
   if (!canManageStaff(staff.role)) redirect("/app-management");
 
   const users = await prisma.platformUser.findMany({

@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth";
 
-const PUBLIC_PATHS = ["/login", "/api/login"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/login",
+  "/forgot-password",
+  "/reset-password",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

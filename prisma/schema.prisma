@@ -96,105 +96,132 @@ enum GroupType {
 // Approval state of a rostered shift. A coach can create/edit a shift but a
 // shift manager (admin or appointed manager) must approve it before it's live.
 enum ShiftStatus {
-  PENDING   // created/edited by a coach, awaiting manager approval
-  APPROVED  // approved by a shift manager — shown as confirmed on the roster
-  REJECTED  // declined by a shift manager
+  PENDING // created/edited by a coach, awaiting manager approval
+  APPROVED // approved by a shift manager — shown as confirmed on the roster
+  REJECTED // declined by a shift manager
 }
 
 // Swap lifecycle. When an assignee asks to swap, the shift opens up for any
 // other qualified staff/coach to accept and take it over.
 enum ShiftSwapStatus {
-  NONE       // no swap in progress
-  REQUESTED  // assignee asked to swap — open for others to accept
-  OPEN       // assignee marked absent/cancelled — open for anyone to cover
+  NONE // no swap in progress
+  REQUESTED // assignee asked to swap — open for others to accept
+  OPEN // assignee marked absent/cancelled — open for anyone to cover
 }
 
 // Completion lifecycle. Staff mark a finished shift as done; the immediate
 // manager then confirms it, which stamps the confirmed date/time.
 enum ShiftCompletionStatus {
-  NOT_DONE           // shift not finished / not marked
-  AWAITING_APPROVAL  // assignee marked it done — manager must confirm
-  CONFIRMED          // manager confirmed completion (completedAt is stamped)
+  NOT_DONE // shift not finished / not marked
+  AWAITING_APPROVAL // assignee marked it done — manager must confirm
+  CONFIRMED // manager confirmed completion (completedAt is stamped)
+}
+
+// ─── PACKAGE (a plan the company sells: user cap, price, trial length) ────────
+// Company-managed — super admins edit these from the ops console, not by
+// deploying code. A club's package is purely commercial: it does not gate
+// which modules are enabled (see Club.enabledModules) or which app tier
+// applies (see Club.appVersion, set independently by staff).
+
+model Package {
+  id         String   @id @default(cuid())
+  key        String   @unique // stable slug, e.g. "starter" — used for defaults, never shown to users
+  name       String   // display name, e.g. "Growth"
+  userCap    Int?     // max members; null = unlimited
+  priceCents Int      @default(0)
+  trialDays  Int?     // e.g. 14 for the Free Trial package; null = not trial-based
+  active     Boolean  @default(true) // inactive packages stay assigned to existing clubs but can't be picked for new ones
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clubs Club[]
+
+  @@map("packages")
 }
 
 // ─── CLUB (one per sports club) ───────────────────────────────────────────────
 
 model Club {
-  id                   String     @id @default(cuid())
-  name                 String
-  slug                 String     @unique
-  code                 String     @unique // short code users type on login e.g. "MONBULK"
-  sport                String     @default("Swimming")
-  sports               String[]   @default([])
-  orgType              String     @default("Club")
-  description          String?
-  street               String?
-  suburb               String?
-  postcode             String?
-  logoUrl              String?
+  id                      String     @id @default(cuid())
+  name                    String
+  slug                    String     @unique
+  code                    String     @unique // short code users type on login e.g. "MONBULK"
+  sport                   String     @default("Swimming")
+  sports                  String[]   @default([])
+  orgType                 String     @default("Club")
+  description             String?
+  street                  String?
+  suburb                  String?
+  postcode                String?
+  logoUrl                 String?
   // Optional banner image behind the dashboard welcome bar (data URL).
-  welcomeImageUrl      String?
-  active               Boolean    @default(true)
-  appVersion           AppVersion @default(FREE)
-  trialEndsAt          DateTime?
-  stripeCustomerId     String?
-  stripeSubscriptionId String?
-  agreementText        String     @default("RESPECT OTHERS IN THIS SPACE. If inappropriate behavior occurs, the user will be removed from the app immediately.\n\nPlease read through our terms and conditions of this app before proceeding.")
-  chatRules            String     @default("") // rules shown when creating a chat room; editable by mods/admins, empty = no rules
+  welcomeImageUrl         String?
+  active                  Boolean    @default(true)
+  appVersion              AppVersion @default(FREE)
+  packageId               String?
+  package                 Package?   @relation(fields: [packageId], references: [id])
+  trialEndsAt             DateTime?
+  stripeCustomerId        String?
+  stripeSubscriptionId    String?
+  agreementText           String     @default("RESPECT OTHERS IN THIS SPACE. If inappropriate behavior occurs, the user will be removed from the app immediately.\n\nPlease read through our terms and conditions of this app before proceeding.")
+  chatRules               String     @default("") // rules shown when creating a chat room; editable by mods/admins, empty = no rules
   // Directory of contact emails by purpose (general, merch, grievance,
   // headCoach, admin), set in App Settings. Each value may hold one or several
   // comma-separated addresses. See parseContactEmails / CONTACT_EMAIL_FIELDS.
-  contactEmails        Json       @default("{}")
+  contactEmails           Json       @default("{}")
   // Ordered palette (hex colours) for the stats progression graph's per-event
   // lines, editable by admins/moderators. Empty = the built-in default palette.
-  statsChartColors     String[]   @default([])
+  statsChartColors        String[]   @default([])
   // Prefilled (but editable) location for new training sessions, e.g. the
   // club's home pool/ground. Empty = no default.
-  defaultTrainingLocation String  @default("")
-  wallAdEvery          Int        @default(0) // insert a sponsor ad after every N wall posts; 0 = off
-  enabledModules       Json       @default("{\"chat\":true,\"events\":true,\"news\":true,\"staffing\":true,\"merch\":true,\"documents\":true,\"sponsors\":true}")
+  defaultTrainingLocation String     @default("")
+  wallAdEvery             Int        @default(0) // insert a sponsor ad after every N wall posts; 0 = off
+  enabledModules          Json       @default("{\"chat\":true,\"events\":true,\"news\":true,\"staffing\":true,\"merch\":true,\"documents\":true,\"sponsors\":true}")
   // Store checkout config. merchPaymentMethods = enabled Stripe payment_method_types
   // (e.g. ["card","afterpay_clearpay","zip"]; "card" also enables Apple/Google Pay wallets).
-  merchPaymentMethods  Json       @default("[\"card\"]")
-  merchCurrency        String     @default("aud")
+  merchPaymentMethods     Json       @default("[\"card\"]")
+  merchCurrency           String     @default("aud")
   // Days after ordering during which buyers may request cancel/refund/return/exchange.
-  merchCancelWindowDays Int       @default(3)
+  merchCancelWindowDays   Int        @default(3)
   // Merch coordinator members can email about refunds/returns/cancellations.
-  merchContactName     String?
-  merchContactEmail    String?
+  merchContactName        String?
+  merchContactEmail       String?
   // "INTERNAL" = sell in-app; "EXTERNAL" = point members to an online store.
-  merchStoreMode       String     @default("INTERNAL")
-  merchExternalUrl     String?
-  merchExternalMessage String?
+  merchStoreMode          String     @default("INTERNAL")
+  merchExternalUrl        String?
+  merchExternalMessage    String?
   // Allow buyers to choose "pay cash" at checkout; a merch officer/admin marks
   // the cash received to submit the order to fulfilment.
-  merchCashEnabled     Boolean    @default(false)
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  merchCashEnabled        Boolean    @default(false)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
 
-  users            User[]
-  events           Event[]
-  news             News[]
-  chatGroups       ChatGroup[]
-  documents        Document[]
-  documentTypes    DocumentType[]
-  documentOwnerTypes DocumentOwnerType[]
-  sponsors         Sponsor[]
-  merchItems       MerchItem[]
-  bannedWords      BannedWord[]
-  contentViolations ContentViolation[]
-  staff            Staff[]
-  designations     Designation[]
-  deliveryOptions  MerchDeliveryOption[]
-  marketplaceListings MarketplaceListing[]
-  shifts           Shift[]
-  trainingSessions TrainingSession[]
-  trainingTemplates TrainingTemplate[]
-  authorityGroups  AuthorityGroup[]
-  teams            Team[]
-  results          Result[]
-  athleteResults   AthleteResult[]
-  qualifyingStandards QualifyingStandard[]
+  users                User[]
+  events               Event[]
+  news                 News[]
+  chatGroups           ChatGroup[]
+  documents            Document[]
+  documentTypes        DocumentType[]
+  documentOwnerTypes   DocumentOwnerType[]
+  sponsors             Sponsor[]
+  merchItems           MerchItem[]
+  bannedWords          BannedWord[]
+  contentViolations    ContentViolation[]
+  staff                Staff[]
+  designations         Designation[]
+  deliveryOptions      MerchDeliveryOption[]
+  marketplaceListings  MarketplaceListing[]
+  shifts               Shift[]
+  trainingSessions     TrainingSession[]
+  trainingTemplates    TrainingTemplate[]
+  authorityGroups      AuthorityGroup[]
+  teams                Team[]
+  results              Result[]
+  athleteResults       AthleteResult[]
+  qualifyingStandards  QualifyingStandard[]
+  safeguardingRequests SafeguardingRequest[]
+  faceProfiles         FaceProfile[]
 
   @@map("clubs")
 }
@@ -202,92 +229,102 @@ model Club {
 // ─── USER ─────────────────────────────────────────────────────────────────────
 
 model User {
-  id             String     @id @default(cuid())
-  clubId         String
-  club           Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  email          String
-  passwordHash   String
-  name           String
-  username       String?    // public display name shown to other members
-  phone          String?
-  avatarUrl      String?
-  avatarStatus   MediaStatus? // set when avatarUrl present
-  role           Role       @default(ATHLETE)
-  status         UserStatus @default(PENDING)
+  id                      String          @id @default(cuid())
+  clubId                  String
+  club                    Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  email                   String
+  passwordHash            String
+  name                    String
+  username                String? // public display name shown to other members
+  phone                   String?
+  avatarUrl               String?
+  avatarStatus            MediaStatus? // set when avatarUrl present
+  role                    Role            @default(ATHLETE)
+  status                  UserStatus      @default(PENDING)
   // Sports (within this club) this member is registered for. Access to
   // sport-tagged content is filtered to these; empty = all sports (single-sport
   // club, or staff who span everything). Chosen at signup, editable by an admin.
-  sports         String[]   @default([])
+  sports                  String[]        @default([])
   // Appointed by an admin to view and process merch orders (collect cash,
   // submit orders to fulfilment) without being a full club admin.
-  isMerchOfficer Boolean    @default(false)
+  isMerchOfficer          Boolean         @default(false)
   // Appointed to approve/manage coach & staff shifts (approve new shifts,
   // confirm completions, add/edit/delete any shift) without being a full admin.
-  isShiftManager Boolean    @default(false)
+  isShiftManager          Boolean         @default(false)
   // Admin-assigned authority group controlling which modules/pages this member
   // can access and member-level actions (e.g. creating chat rooms). Null =
   // no group (falls back to club-wide module access).
-  authorityGroupId String?
-  authorityGroup   AuthorityGroup? @relation(fields: [authorityGroupId], references: [id], onDelete: SetNull)
-  dateOfBirth    DateTime?
-  gender         Gender?
-  isUnder18      Boolean    @default(false)
-  parentId       String?
-  parent         User?      @relation("ParentChild", fields: [parentId], references: [id])
-  children       User[]     @relation("ParentChild")
-  parentApproved Boolean    @default(false)
+  authorityGroupId        String?
+  authorityGroup          AuthorityGroup? @relation(fields: [authorityGroupId], references: [id], onDelete: SetNull)
+  dateOfBirth             DateTime?
+  gender                  Gender?
+  // Free-text school and school-year/level, collected when a player is added
+  // directly (e.g. Teams → + Add Player). Optional, athlete-oriented fields.
+  school                  String?
+  yearLevel               String?
+  isUnder18               Boolean         @default(false)
+  parentId                String?
+  parent                  User?           @relation("ParentChild", fields: [parentId], references: [id])
+  children                User[]          @relation("ParentChild")
+  parentApproved          Boolean         @default(false)
   // Set on an athlete at signup when they gave no parent/guardian email
   // that matched an existing member — an admin must assign someone to oversee
   // them (see Guardianship) before the account can be approved.
-  needsGuardianAssignment Boolean @default(false)
-  policyAcceptedAt DateTime? // set once the user accepts the club's community agreement
+  needsGuardianAssignment Boolean         @default(false)
+  policyAcceptedAt        DateTime? // set once the user accepts the club's community agreement
   // Precise timestamp of this member's most recent app activity, bumped (throttled)
   // on each page load. Powers the "last seen" column admins see in Management.
-  lastSeenAt     DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  lastSeenAt              DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
-  pinHash          String?
-  sessions         Session[]
-  accessLogs       AccessLog[]
-  pushSubscriptions PushSubscription[]
-  moduleViews      ModuleView[]
-  chatMessages     ChatMessage[]
-  chatGroups       ChatGroupMember[]
-  supervisedGroups ChatGroup[]       @relation("GroupSupervisor")
-  createdGroups    ChatGroup[]       @relation("GroupCreator")
-  events           Event[]
-  news             News[]
-  documents        Document[]
-  ownedDocuments   Document[]        @relation("DocumentOwner")
-  orders           MerchOrder[]
-  staffProfile     Staff?
-  notifications    Notification[]
-  messageReactions MessageReaction[]
-  bannedWords      BannedWord[]      @relation("BannedWordAuthor")
-  oauthAccounts    OAuthAccount[]
-  newsComments     NewsComment[]
-  newsReactions    NewsReaction[]
-  newsViews        NewsView[]
-  eventComments    EventComment[]
-  eventRsvps       EventRSVP[]
+  pinHash             String?
+  sessions            Session[]
+  accessLogs          AccessLog[]
+  pushSubscriptions   PushSubscription[]
+  moduleViews         ModuleView[]
+  chatMessages        ChatMessage[]
+  chatGroups          ChatGroupMember[]
+  supervisedGroups    ChatGroup[]          @relation("GroupSupervisor")
+  createdGroups       ChatGroup[]          @relation("GroupCreator")
+  events              Event[]
+  news                News[]
+  documents           Document[]
+  ownedDocuments      Document[]           @relation("DocumentOwner")
+  orders              MerchOrder[]
+  staffProfile        Staff?
+  notifications       Notification[]
+  messageReactions    MessageReaction[]
+  bannedWords         BannedWord[]         @relation("BannedWordAuthor")
+  oauthAccounts       OAuthAccount[]
+  newsComments        NewsComment[]
+  newsReactions       NewsReaction[]
+  newsViews           NewsView[]
+  eventComments       EventComment[]
+  eventRsvps          EventRSVP[]
   marketplaceListings MarketplaceListing[]
-  shiftsCreated       Shift[] @relation("ShiftCreatedBy")
-  shiftsApproved      Shift[] @relation("ShiftApprovedBy")
-  shiftsCompleted     Shift[] @relation("ShiftCompletedBy")
-  shiftsSwapRequested Shift[] @relation("ShiftSwapRequestedBy")
-  trainingSessions    TrainingSession[] @relation("TrainingCreatedBy")
+  shiftsCreated       Shift[]              @relation("ShiftCreatedBy")
+  shiftsApproved      Shift[]              @relation("ShiftApprovedBy")
+  shiftsCompleted     Shift[]              @relation("ShiftCompletedBy")
+  shiftsSwapRequested Shift[]              @relation("ShiftSwapRequestedBy")
+  trainingSessions    TrainingSession[]    @relation("TrainingCreatedBy")
   trainingComments    TrainingComment[]
   trainingRsvps       TrainingRSVP[]
 
-  guardianOf   Guardianship[] @relation("GuardianUser")   // children this user oversees (as the guardian)
-  guardedBy    Guardianship[] @relation("ChildUser")       // guardians linked to this user (as the child)
-  teams        Team[]         @relation("TeamMembers")     // teams this athlete belongs to
-  resultsCreated Result[]     @relation("ResultCreatedBy")
-  resultScorerEntries ResultScorer[] @relation("ResultScorerUser") // matches this athlete scored in
-  athleteResults        AthleteResult[] @relation("AthleteResults")        // this athlete's personal performance results
-  athleteResultsCreated AthleteResult[] @relation("AthleteResultCreatedBy")
+  guardianOf                 Guardianship[]       @relation("GuardianUser") // children this user oversees (as the guardian)
+  guardedBy                  Guardianship[]       @relation("ChildUser") // guardians linked to this user (as the child)
+  teams                      Team[]               @relation("TeamMembers") // teams this athlete belongs to
+  resultsCreated             Result[]             @relation("ResultCreatedBy")
+  resultScorerEntries        ResultScorer[]       @relation("ResultScorerUser") // matches this athlete scored in
+  athleteResults             AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
+  athleteResultsCreated      AthleteResult[]      @relation("AthleteResultCreatedBy")
   qualifyingStandardsCreated QualifyingStandard[] @relation("QualifyingStandardCreatedBy")
+
+  safeguardingRequestsAsChild   SafeguardingRequest[] @relation("SafeguardingChild")
+  safeguardingRequestsRequested SafeguardingRequest[] @relation("SafeguardingRequestedBy")
+  safeguardingRequestsResolved  SafeguardingRequest[] @relation("SafeguardingResolvedBy")
+  faceProfileAsMember           FaceProfile[]         @relation("FaceProfileMember")
+  faceProfilesTagged            FaceProfile[]         @relation("FaceProfileTaggedBy")
 
   @@unique([clubId, email])
   @@unique([clubId, username])
@@ -324,12 +361,73 @@ model Guardianship {
 
   // RSVPs this contact-only guardian has made (before/without an app account),
   // and the signed action-link tokens issued to them.
-  eventRsvps      EventRSVP[]
-  trainingRsvps   TrainingRSVP[]
-  rsvpTokens      RsvpActionToken[]
+  eventRsvps    EventRSVP[]
+  trainingRsvps TrainingRSVP[]
+  rsvpTokens    RsvpActionToken[]
 
   @@unique([childId, guardianEmail])
   @@map("guardianships")
+}
+
+// Staged change to an under-18 athlete's record — created instead of applying
+// the change immediately, and only actioned once an admin (or the child's own
+// linked guardian, via Guardianship) approves it. Covers changes that used to
+// apply instantly: profile edits, guardian re-assignment, and team/roster
+// membership. Chat/DM membership approval and Wall post/comment moderation
+// have their own existing pending flags (ChatGroupMember.approved,
+// News/NewsComment.pendingReview) and don't need a row here.
+//
+// `payload` shape depends on `kind` (enforced in code, not the DB):
+//   PROFILE            { name?, phone?, dateOfBirth?, gender? } — only changed fields
+//   GUARDIAN           { guardianUserId, guardianName, guardianEmail }
+//   TEAM_ADD/TEAM_REMOVE { teamId, teamName }
+model SafeguardingRequest {
+  id            String    @id @default(cuid())
+  clubId        String
+  club          Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  kind          String // "PROFILE" | "GUARDIAN" | "TEAM_ADD" | "TEAM_REMOVE"
+  childId       String
+  child         User      @relation("SafeguardingChild", fields: [childId], references: [id], onDelete: Cascade)
+  payload       Json
+  status        String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  requestedById String
+  requestedBy   User      @relation("SafeguardingRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  resolvedById  String?
+  resolvedBy    User?     @relation("SafeguardingResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([clubId, status])
+  @@index([childId, status])
+  @@map("safeguarding_requests")
+}
+
+// A named face, tagged by an admin from an uploaded photo, so future uploads
+// can be recognized and (if flagged) auto-blurred without waiting for review.
+// Not cascade-deletable with its club — this is safety-relevant memory, not
+// disposable content.
+model FaceProfile {
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Restrict)
+
+  name   String // free-text label, or the linked member's name kept in sync at tag time
+  userId String? // set when tagged against a registered club member
+  user   User?   @relation("FaceProfileMember", fields: [userId], references: [id], onDelete: SetNull)
+
+  shouldBlur Boolean @default(true) // whether future uploads should auto-blur this person
+  // One or more 128-d face-recognition descriptors (face-api.js), captured
+  // from each photo this person was tagged in — more angles, better matches.
+  descriptors Json
+
+  taggedById String?
+  taggedBy   User?   @relation("FaceProfileTaggedBy", fields: [taggedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clubId])
+  @@map("face_profiles")
 }
 
 // A signed, expiring action link handed to a no-account guardian by email/SMS,
@@ -337,16 +435,16 @@ model Guardianship {
 // token lives only in the link; we store its hash. Scoped to one guardianship
 // and one event OR session; expires after the response window.
 model RsvpActionToken {
-  id             String       @id @default(cuid())
-  tokenHash      String       @unique
+  id             String           @id @default(cuid())
+  tokenHash      String           @unique
   guardianshipId String
-  guardianship   Guardianship @relation(fields: [guardianshipId], references: [id], onDelete: Cascade)
+  guardianship   Guardianship     @relation(fields: [guardianshipId], references: [id], onDelete: Cascade)
   eventId        String?
-  event          Event?       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          Event?           @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sessionId      String?
   session        TrainingSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   expiresAt      DateTime
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime         @default(now())
 
   @@index([guardianshipId])
   @@map("rsvp_action_tokens")
@@ -392,12 +490,18 @@ model ModuleView {
 }
 
 model Session {
-  id        String    @id @default(cuid())
-  userId    String
-  clubId    String
-  token     String    @unique
-  expiresAt DateTime
-  agreedAt  DateTime?
+  id          String    @id @default(cuid())
+  userId      String
+  clubId      String
+  token       String    @unique
+  expiresAt   DateTime
+  agreedAt    DateTime?
+  // Which sport this session is currently focused on, for members registered
+  // for 2+ sports at a multi-sport club (see src/lib/sports.ts). Null = no
+  // choice made yet, content falls back to the union of the viewer's sports.
+  // Per-session (not per-user) because switching clubs already creates a
+  // fresh session row, and the sport choice should reset with it.
+  activeSport String?
   // Best-effort geolocation of the login, resolved once at creation time from
   // the request IP (see lib/geoip.ts). Never blocks login on lookup failure —
   // all null if the IP was private/local or the lookup failed.
@@ -406,8 +510,8 @@ model Session {
   countryCode String?
   region      String?
   city        String?
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
 
   @@map("sessions")
 }
@@ -437,6 +541,7 @@ model PlatformUser {
   updatedAt    DateTime     @updatedAt
 
   sessions PlatformSession[]
+  reviewedSignupRequests SignupRequest[]
 
   @@map("platform_users")
 }
@@ -450,6 +555,51 @@ model PlatformSession {
   createdAt      DateTime     @default(now())
 
   @@map("platform_sessions")
+}
+
+enum SignupRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// A checkout submission from the marketing site (Website/), captured
+// before any Club/User is created. Payment (if any) has already happened
+// by the time this row exists — see Website/src/app/api/checkout/route.ts
+// and .../api/webhooks/stripe/route.ts — but provisioning now waits for a
+// platform admin to approve it from /platform/signups, rather than
+// happening automatically. Fields beyond what Club/User store (registered
+// legal name, requested custom URL, contact phone, estimated user count)
+// are kept here for admin/support reference and are not duplicated onto
+// Club once approved.
+model SignupRequest {
+  id                       String              @id @default(cuid())
+  status                   SignupRequestStatus @default(PENDING)
+  packageKey               String
+  interval                 String
+  appVersion               AppVersion
+  trialDays                Int
+  clubName                 String
+  registeredName           String?
+  orgType                  String
+  sports                   String[]
+  street                   String?
+  suburb                   String?
+  postcode                 String?
+  contactName              String
+  contactEmail             String
+  contactPhone             String?
+  requestedUrl             String?
+  estimatedUsers           Int
+  stripeCustomerId         String?
+  stripeSubscriptionId     String?
+  createdAt                DateTime            @default(now())
+  reviewedAt               DateTime?
+  reviewedByPlatformUserId String?
+  reviewedByPlatformUser   PlatformUser?       @relation(fields: [reviewedByPlatformUserId], references: [id])
+  rejectionReason          String?
+
+  @@map("signup_requests")
 }
 
 // A record of a distinct app visit by a member, so admins can see when and how
@@ -475,6 +625,10 @@ model ChatGroup {
   description  String?
   isPublic     Boolean           @default(false)
   isRestricted Boolean           @default(false)
+  // The one open, club-wide chat every member is auto-added to (created at
+  // signup). Every other group/thread is invite-only — only this flag (not
+  // isPublic) makes a room self-joinable via the join route.
+  isGeneral    Boolean           @default(false)
   // A 1:1 direct message between two members (created from the "Contact coaches
   // or staff" list on the roster). Kept private and listed separately from
   // regular group chats.
@@ -494,34 +648,35 @@ model ChatGroup {
 }
 
 model ChatGroupMember {
-  id        String    @id @default(cuid())
-  groupId   String
-  userId    String
-  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isAdmin   Boolean   @default(false)
-  approved  Boolean   @default(false)
-  joinedAt  DateTime  @default(now())
+  id       String    @id @default(cuid())
+  groupId  String
+  userId   String
+  group    ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isAdmin  Boolean   @default(false)
+  approved Boolean   @default(false)
+  joinedAt DateTime  @default(now())
 
   @@unique([groupId, userId])
   @@map("chat_group_members")
 }
 
 model ChatMessage {
-  id          String      @id @default(cuid())
+  id          String            @id @default(cuid())
   groupId     String
   userId      String
   content     String
   imageUrl    String?
   imageStatus MediaStatus? // set when imageUrl is present
-  flagged     Boolean     @default(false)
+  flagged     Boolean           @default(false)
   flagReason  String?
-  deletedAt   DateTime?   // soft delete by moderator
+  deletedAt   DateTime? // soft delete by moderator
   reactions   MessageReaction[]
-  group       ChatGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id])
-  createdAt   DateTime    @default(now())
+  group       ChatGroup         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id])
+  createdAt   DateTime          @default(now())
 
+  @@index([groupId, createdAt])
   @@map("chat_messages")
 }
 
@@ -529,7 +684,7 @@ model MessageReaction {
   id        String      @id @default(cuid())
   messageId String
   userId    String
-  emoji     String      // "👍" | "👎" | "😊" | "😂" | "❤️" | "😢"
+  emoji     String // "👍" | "👎" | "😊" | "😂" | "❤️" | "😢"
   message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime    @default(now())
@@ -539,29 +694,36 @@ model MessageReaction {
 }
 
 model Event {
-  id          String    @id @default(cuid())
-  clubId      String
-  club        Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  type        EventType @default(OTHER)
-  sport       String?   // which sport this event belongs to; null = all sports
-  color       String?   // hex color chosen by the creator/admin (e.g. "#3b82f6")
-  opponent    String?   // who the club is playing/versing, for match/tournament events
-  startDate   DateTime
-  endDate     DateTime?
-  location    String?
-  allDay      Boolean   @default(false)
-  createdById String
-  createdBy   User      @relation(fields: [createdById], references: [id])
-  comments    EventComment[]
-  rsvps       EventRSVP[]
-  rsvpTokens  RsvpActionToken[]
+  id             String            @id @default(cuid())
+  clubId         String
+  club           Club              @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  type           EventType         @default(OTHER)
+  sport          String? // which sport this event belongs to; null = all sports
+  color          String? // hex color chosen by the creator/admin (e.g. "#3b82f6")
+  opponent       String? // who the club is playing/versing, for match/tournament events
+  // The specific team this fixture is for (e.g. "Under 14 B"), so members can
+  // filter to just their team's matches. Optional — most events (club social
+  // nights, whole-squad meets) aren't tied to a single team.
+  teamId         String?
+  team           Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  startDate      DateTime
+  endDate        DateTime?
+  location       String?
+  allDay         Boolean           @default(false)
+  createdById    String
+  createdBy      User              @relation(fields: [createdById], references: [id])
+  comments       EventComment[]
+  rsvps          EventRSVP[]
+  rsvpTokens     RsvpActionToken[]
   // When the pre-event reminder was dispatched, so the cron never sends twice.
   reminderSentAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
+  @@index([clubId, startDate])
+  @@index([teamId, startDate])
   @@map("events")
 }
 
@@ -585,19 +747,19 @@ enum RSVPStatus {
 }
 
 model EventRSVP {
-  id        String     @id @default(cuid())
-  eventId   String
-  event     Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  id             String        @id @default(cuid())
+  eventId        String
+  event          Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   // Exactly one of userId / guardianshipId is set: a member's own response, or
   // a no-account guardian's response made via a signed link. Both feed the same
   // attendance tally — there is no separate guardian RSVP table.
-  userId    String?
-  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   guardianshipId String?
   guardianship   Guardianship? @relation(fields: [guardianshipId], references: [id], onDelete: Cascade)
-  status    RSVPStatus
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  status         RSVPStatus
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([eventId, userId])
   @@unique([eventId, guardianshipId])
@@ -606,39 +768,44 @@ model EventRSVP {
 }
 
 model News {
-  id          String   @id @default(cuid())
-  clubId      String
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  title       String
-  content     String
-  type        NewsType @default(NEWS)
-  imageUrl    String?
-  imageStatus MediaStatus @default(APPROVED)
-  linkUrl     String?     // attached external link (rendered as embed/card)
-  pendingReview Boolean   @default(false) // media/link posts await admin approval
-  published   Boolean     @default(true)
-  createdById String
-  createdBy   User     @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String      @id @default(cuid())
+  clubId        String
+  club          Club        @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  title         String
+  content       String
+  type          NewsType    @default(NEWS)
+  imageUrl      String?
+  imageStatus   MediaStatus @default(APPROVED)
+  linkUrl       String? // attached external link (rendered as embed/card)
+  pendingReview Boolean     @default(false) // media/link posts await admin approval
+  published     Boolean     @default(true)
+  createdById   String
+  createdBy     User        @relation(fields: [createdById], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  comments    NewsComment[]
-  reactions   NewsReaction[]
-  views       NewsView[]
+  comments  NewsComment[]
+  reactions NewsReaction[]
+  views     NewsView[]
 
+  @@index([clubId, published, createdAt])
   @@map("news")
 }
 
 // ─── NEWS WALL: comments, reactions, seen-by ─────────────────────────────────
 
 model NewsComment {
-  id        String   @id @default(cuid())
-  newsId    String
-  news      News     @relation(fields: [newsId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  content   String
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  newsId        String
+  news          News     @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content       String
+  // Mirrors News.pendingReview/published — a comment from an under-18 author
+  // is held here until an admin or that athlete's linked guardian approves it.
+  pendingReview Boolean  @default(false)
+  published     Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
   @@index([newsId])
   @@map("news_comments")
@@ -682,6 +849,7 @@ model Notification {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -721,11 +889,39 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// Every password an identity (by email — the same login spans a User row per
+// club, see the "one identity" comments in the password routes) has ever set,
+// so a reset/change can be blocked from reusing one. Written right before the
+// live passwordHash is overwritten; never read except for that reuse check.
+model PasswordHistory {
+  id           String   @id @default(cuid())
+  email        String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@index([email])
+  @@map("password_history")
+}
+
+// A row per failed auth attempt (password login, PIN login, password-reset
+// request), keyed by an arbitrary identifier — "email:<addr>" or "ip:<addr>".
+// Used to rate-limit/lock out brute force; a successful login clears the
+// email-keyed rows. Old rows are never read past the rate-limit window, so
+// they're pruned lazily rather than needing a cron sweep.
+model LoginAttempt {
+  id         String   @id @default(cuid())
+  identifier String
+  createdAt  DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@map("login_attempts")
+}
+
 model OAuthAccount {
   id                String   @id @default(cuid())
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider          String   // "google" | "github" | "facebook" | "apple"
+  provider          String // "google" | "github" | "facebook" | "apple"
   providerAccountId String
   email             String?
   name              String?
@@ -736,37 +932,37 @@ model OAuthAccount {
 }
 
 model Staff {
-  id             String       @id @default(cuid())
-  clubId         String
-  club           Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  id                     String             @id @default(cuid())
+  clubId                 String
+  club                   Club               @relation(fields: [clubId], references: [id], onDelete: Cascade)
   // Optional link to an app user account. Staff are standalone records the
   // admin creates directly — they do NOT have to be app members.
-  userId         String?      @unique
-  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  name           String
-  preferredName  String?
-  email          String?
-  phone          String?      // mobile
-  telephone      String?      // landline
-  address        String?
-  designationId  String?
-  designation    Designation? @relation(fields: [designationId], references: [id], onDelete: SetNull)
-  photoUrl       String?      // data URL
+  userId                 String?            @unique
+  user                   User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name                   String
+  preferredName          String?
+  email                  String?
+  phone                  String? // mobile
+  telephone              String? // landline
+  address                String?
+  designationId          String?
+  designation            Designation?       @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  photoUrl               String? // data URL
   // Minimum notice (in hours) this coach must give to cancel/swap their own
   // shift — set by an admin when adding the coach. null = no restriction.
   // e.g. 1 = within the hour, 24 = 1 day, 168 = 7 days.
   shiftCancelNoticeHours Int? // minimum hours before a shift they may self-cancel
   // Array of { name: string, fileUrl: string | null } — fileUrl is a data URL
   // of an uploaded certificate (image or PDF), or null for a name-only entry.
-  qualifications Json         @default("[]")
-  otherDetails   String?
-  bio            String?
-  rosters        Roster[]
-  shifts         Shift[]
-  trainingSessions TrainingSession[]
-  trainingTemplates TrainingTemplate[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  qualifications         Json               @default("[]")
+  otherDetails           String?
+  bio                    String?
+  rosters                Roster[]
+  shifts                 Shift[]
+  trainingSessions       TrainingSession[]
+  trainingTemplates      TrainingTemplate[]
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
   @@map("staff")
 }
@@ -801,29 +997,29 @@ model Roster {
 // workflow layered on top. Kept separate from the simpler Roster model above so
 // the "who's on today" board keeps working while shifts add the full lifecycle.
 model Shift {
-  id        String   @id @default(cuid())
-  clubId    String
-  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
   // The staff/coach assigned to work the shift. Null only while an open swap
   // has no taker (kept nullable so deleting a staff record leaves the shift).
-  staffId   String?
-  staff     Staff?   @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  staffId String?
+  staff   Staff?  @relation(fields: [staffId], references: [id], onDelete: SetNull)
 
   date      DateTime // the calendar day of the shift (time-of-day lives in the fields below)
-  startTime String   // "HH:mm"
-  endTime   String   // "HH:mm"
-  role      String   // duty, e.g. "Poolside Coach", "First Aid"
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
+  role      String // duty, e.g. "Poolside Coach", "First Aid"
   notes     String?
 
   // Approval workflow
-  status          ShiftStatus @default(PENDING)
-  createdById     String?
-  createdBy       User?       @relation("ShiftCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  approvedById    String?
-  approvedBy      User?       @relation("ShiftApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  approvedAt      DateTime?
-  reviewNote      String?     // optional reason attached on approve/reject
+  status       ShiftStatus @default(PENDING)
+  createdById  String?
+  createdBy    User?       @relation("ShiftCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedById String?
+  approvedBy   User?       @relation("ShiftApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  reviewNote   String? // optional reason attached on approve/reject
 
   // Swap workflow
   swapStatus        ShiftSwapStatus @default(NONE)
@@ -833,10 +1029,10 @@ model Shift {
 
   // Completion workflow
   completionStatus ShiftCompletionStatus @default(NOT_DONE)
-  markedDoneAt     DateTime?  // when the assignee marked it finished
-  completedById    String?    // manager who confirmed completion
-  completedBy      User?      @relation("ShiftCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
-  completedAt      DateTime?  // stamped when the manager confirms completion
+  markedDoneAt     DateTime? // when the assignee marked it finished
+  completedById    String? // manager who confirmed completion
+  completedBy      User?                 @relation("ShiftCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt      DateTime? // stamped when the manager confirms completion
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -850,26 +1046,26 @@ model Shift {
 // questions in the per-session Q&A thread. Recurring plans are stored as one
 // row per occurrence so each can be edited and discussed independently.
 model TrainingSession {
-  id        String   @id @default(cuid())
-  clubId    String
-  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
 
-  title     String   // e.g. "Squad A — Endurance", "U12 Ball Handling"
-  sport     String?  // which sport this session belongs to; null = all sports
-  group     String?  // team/group the session is for, e.g. "Under 12s", "Seniors"
-  location  String?
+  title    String // e.g. "Squad A — Endurance", "U12 Ball Handling"
+  sport    String? // which sport this session belongs to; null = all sports
+  group    String? // team/group the session is for, e.g. "Under 12s", "Seniors"
+  location String?
 
   // The coach delivering the session (optional link to a staff record).
-  staffId   String?
-  staff     Staff?   @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  staffId String?
+  staff   Staff?  @relation(fields: [staffId], references: [id], onDelete: SetNull)
 
   date      DateTime // calendar day of the session
-  startTime String   // "HH:mm"
-  endTime   String   // "HH:mm"
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
 
   // The training content itself — sets / drills / moves / plan, free-form text.
-  plan      String?
-  color     String?  // optional hex colour to group sessions visually on the calendar
+  plan       String?
+  color      String? // optional hex colour to group sessions visually on the calendar
   // When true, athletes in the session's sport are counted as attending unless
   // they explicitly opt out — so recurring squads don't have to RSVP every time.
   // Only opt-outs (NOT_GOING / MAYBE) are ever stored; "going" is the remainder.
@@ -878,13 +1074,13 @@ model TrainingSession {
   createdById String?
   createdBy   User?   @relation("TrainingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  comments  TrainingComment[]
-  rsvps     TrainingRSVP[]
-  rsvpTokens RsvpActionToken[]
+  comments       TrainingComment[]
+  rsvps          TrainingRSVP[]
+  rsvpTokens     RsvpActionToken[]
   // When the pre-session reminder was dispatched, so the cron never sends twice.
   reminderSentAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@index([clubId, date])
   @@map("training_sessions")
@@ -893,18 +1089,18 @@ model TrainingSession {
 // A member's attendance for a training session (going / not going / maybe), so
 // the coach who set it can see how many are coming. Reuses the event RSVPStatus.
 model TrainingRSVP {
-  id        String          @id @default(cuid())
-  sessionId String
-  session   TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id             String          @id @default(cuid())
+  sessionId      String
+  session        TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   // Exactly one of userId / guardianshipId is set — see EventRSVP.
-  userId    String?
-  user      User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
   guardianshipId String?
-  guardianship   Guardianship? @relation(fields: [guardianshipId], references: [id], onDelete: Cascade)
-  status    RSVPStatus
-  reason    String?         // why the athlete can't/might not make it (for NOT_GOING / MAYBE)
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  guardianship   Guardianship?   @relation(fields: [guardianshipId], references: [id], onDelete: Cascade)
+  status         RSVPStatus
+  reason         String? // why the athlete can't/might not make it (for NOT_GOING / MAYBE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([sessionId, userId])
   @@unique([sessionId, guardianshipId])
@@ -916,22 +1112,22 @@ model TrainingRSVP {
 // Monday endurance") and can then create dated sessions from it without
 // retyping the plan. Holds everything a session does except the date.
 model TrainingTemplate {
-  id        String  @id @default(cuid())
-  clubId    String
-  club      Club    @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  name      String  // the label coaches pick from
-  title     String?
-  group     String?
-  location  String?
-  staffId   String?
-  staff     Staff?  @relation(fields: [staffId], references: [id], onDelete: SetNull)
-  startTime String?
-  endTime   String?
-  plan      String?
-  color     String?
+  id          String   @id @default(cuid())
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name        String // the label coaches pick from
+  title       String?
+  group       String?
+  location    String?
+  staffId     String?
+  staff       Staff?   @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  startTime   String?
+  endTime     String?
+  plan        String?
+  color       String?
   createdById String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([clubId])
   @@map("training_templates")
@@ -953,31 +1149,31 @@ model TrainingComment {
 }
 
 model MerchItem {
-  id          String           @id @default(cuid())
-  clubId      String
-  club        Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  price       Float
-  imageUrl    String?
-  stock       Int              @default(0)
+  id                  String           @id @default(cuid())
+  clubId              String
+  club                Club             @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name                String
+  description         String?
+  price               Float
+  imageUrl            String?
+  stock               Int              @default(0)
   // When true, stock isn't tracked/limited — the club takes the order and
   // sources it from the supplier afterwards.
-  madeToOrder Boolean          @default(false)
+  madeToOrder         Boolean          @default(false)
   // Buyer-selectable options. Empty list = that option isn't offered.
-  sizes       String[]         @default([])
-  colors      String[]         @default([])
-  styles      String[]         @default([])
-  category    String?
-  active      Boolean          @default(true)
+  sizes               String[]         @default([])
+  colors              String[]         @default([])
+  styles              String[]         @default([])
+  category            String?
+  active              Boolean          @default(true)
   // When true, buyers can add a name to be printed/embroidered on this item.
-  allowNameEmbroidery Boolean  @default(false)
+  allowNameEmbroidery Boolean          @default(false)
   // Extra charge (per item) the admin sets for each personalisation method.
-  printSurcharge      Float    @default(0)
-  embroiderySurcharge Float    @default(0)
-  orderItems  MerchOrderItem[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  printSurcharge      Float            @default(0)
+  embroiderySurcharge Float            @default(0)
+  orderItems          MerchOrderItem[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@map("merch_items")
 }
@@ -1001,13 +1197,13 @@ model MerchDeliveryOption {
 }
 
 model MerchOrder {
-  id        String           @id @default(cuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id])
-  items     MerchOrderItem[]
-  total     Float // subtotal + deliveryFee
-  status    OrderStatus      @default(PENDING)
-  notes     String?
+  id               String           @id @default(cuid())
+  userId           String
+  user             User             @relation(fields: [userId], references: [id])
+  items            MerchOrderItem[]
+  total            Float // subtotal + deliveryFee
+  status           OrderStatus      @default(PENDING)
+  notes            String?
   // Delivery
   deliveryType     String?
   deliveryLabel    String?
@@ -1019,37 +1215,38 @@ model MerchOrder {
   deliverySuburb   String?
   deliveryState    String?
   deliveryPostcode String?
-  deliveryFee      Float   @default(0)
+  deliveryFee      Float            @default(0)
   deliveryEstimate String?
   // Payment
-  paymentMethod String? // "card" | "afterpay_clearpay" | "zip" | "manual"
-  paymentStatus String  @default("UNPAID") // "UNPAID" | "PAID" | "REFUNDED"
-  stripeSessionId String?
+  paymentMethod    String? // "card" | "afterpay_clearpay" | "zip" | "manual"
+  paymentStatus    String           @default("UNPAID") // "UNPAID" | "PAID" | "REFUNDED"
+  stripeSessionId  String?
   // Cancel / refund / return / exchange request
-  requestType   String? // "CANCEL" | "REFUND" | "RETURN" | "EXCHANGE"
-  requestReason String?
-  requestStatus String? // "REQUESTED" | "APPROVED" | "REJECTED"
-  requestedAt   DateTime?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  requestType      String? // "CANCEL" | "REFUND" | "RETURN" | "EXCHANGE"
+  requestReason    String?
+  requestStatus    String? // "REQUESTED" | "APPROVED" | "REJECTED"
+  requestedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
+  @@index([userId, createdAt])
   @@map("merch_orders")
 }
 
 model MerchOrderItem {
-  id       String     @id @default(cuid())
-  orderId  String
-  itemId   String
-  order    MerchOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  item     MerchItem  @relation(fields: [itemId], references: [id])
-  quantity Int
-  price    Float // per-unit price actually charged (base + personalisation surcharge)
+  id                    String     @id @default(cuid())
+  orderId               String
+  itemId                String
+  order                 MerchOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  item                  MerchItem  @relation(fields: [itemId], references: [id])
+  quantity              Int
+  price                 Float // per-unit price actually charged (base + personalisation surcharge)
   // Buyer-selected options for this line, when the item offers them.
-  size     String?
-  color    String?
-  style    String?
+  size                  String?
+  color                 String?
+  style                 String?
   // Name the buyer wants printed/embroidered on the item, if any.
-  personalizedName String?
+  personalizedName      String?
   // How the name is applied: "PRINT" | "EMBROIDER" (null if no name).
   personalizationMethod String?
 
@@ -1059,18 +1256,18 @@ model MerchOrderItem {
 // Member-to-member marketplace for unused gear. Listings are hidden until an
 // admin approves them.
 model MarketplaceListing {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   clubId      String
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  club        Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
   sellerId    String
-  seller      User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller      User      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   title       String
   description String?
   price       Float
   imageUrl    String?
   condition   String? // "New", "Like new", "Good", "Used"
-  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "SOLD"
-  createdAt   DateTime @default(now())
+  status      String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "SOLD"
+  createdAt   DateTime  @default(now())
   reviewedAt  DateTime?
 
   @@index([clubId, status])
@@ -1078,46 +1275,46 @@ model MarketplaceListing {
 }
 
 model Document {
-  id           String   @id @default(cuid())
-  clubId       String
-  club         Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  id              String             @id @default(cuid())
+  clubId          String
+  club            Club               @relation(fields: [clubId], references: [id], onDelete: Cascade)
   // Optional: club-wide resources (category "General") are titled; a person's
   // record (a coach's WWCC) is identified by personName + documentType instead.
-  title        String?
-  description  String?
+  title           String?
+  description     String?
   // Data URL of an uploaded/photographed file, or an external link.
-  fileUrl      String
-  fileName     String?
-  fileType     String? // MIME type, e.g. "application/pdf" — drives the list icon
+  fileUrl         String
+  fileName        String?
+  fileType        String? // MIME type, e.g. "application/pdf" — drives the list icon
   // Denormalised name of the "belongs to" type — used for grouping on the list.
-  category     String?
+  category        String?
   // ── Who the document belongs to ──────────────────────────────────────────
   belongsToTypeId String?
   belongsToType   DocumentOwnerType? @relation(fields: [belongsToTypeId], references: [id], onDelete: SetNull)
   // The app member it belongs to, when they have an account. They can always
   // view their own document. Left null for people who aren't members.
-  ownerUserId    String?
-  ownerUser      User?     @relation("DocumentOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  personName     String?
-  personDob      DateTime?
-  workType       String?       // "Full-time" | "Part-time" | "Casual"
-  issueDate      DateTime?
-  expiryDate     DateTime?     // null = does not expire
-  documentTypeId String?
-  documentType   DocumentType? @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
+  ownerUserId     String?
+  ownerUser       User?              @relation("DocumentOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  personName      String?
+  personDob       DateTime?
+  workType        String? // "Full-time" | "Part-time" | "Casual"
+  issueDate       DateTime?
+  expiryDate      DateTime? // null = does not expire
+  documentTypeId  String?
+  documentType    DocumentType?      @relation(fields: [documentTypeId], references: [id], onDelete: SetNull)
   // ── Access control ───────────────────────────────────────────────────────
   // Admins, the uploader and ownerUser can always view. Beyond that, access is
   // granted to these roles, or to everyone when accessEveryone is true.
   // Empty roles + accessEveryone false = private (admins/owner/uploader only).
-  accessRoles    String[]  @default([])
-  accessEveryone Boolean   @default(false)
+  accessRoles     String[]           @default([])
+  accessEveryone  Boolean            @default(false)
   // Free-text note of who else was intended to have access. DISPLAY ONLY —
   // it is not enforced and grants access to nobody.
-  accessLabel    String?
-  uploadedById String
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  accessLabel     String?
+  uploadedById    String
+  uploadedBy      User               @relation(fields: [uploadedById], references: [id])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([clubId, category])
   @@index([ownerUserId])
@@ -1205,11 +1402,12 @@ model Team {
   id          String   @id @default(cuid())
   clubId      String
   club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  name        String   // e.g. "Under 14 B", "Gold"
-  sport       String?  // which sport this team belongs to; null = all sports
-  code        String?  // short label, e.g. "U14 B", "U21 G3"
+  name        String // e.g. "Under 14 B", "Gold"
+  sport       String? // which sport this team belongs to; null = all sports
+  code        String? // short label, e.g. "U14 B", "U21 G3"
   description String?
   members     User[]   @relation("TeamMembers")
+  events      Event[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1220,21 +1418,21 @@ model Team {
 // A match/tournament result recorded under Training → Results. Team-sport
 // results for now: who we played, the score, and a summary of the game.
 model Result {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   clubId      String
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  title       String   // e.g. "Round 5 vs Ferntree Gully"
-  teamName    String?  // our team/squad that played
-  opponent    String?  // who we versed
+  club        Club           @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  title       String // e.g. "Round 5 vs Ferntree Gully"
+  teamName    String? // our team/squad that played
+  opponent    String? // who we versed
   date        DateTime
-  ourScore    String?  // free-text score so any sport fits, e.g. "3-1", "148/6"
+  ourScore    String? // free-text score so any sport fits, e.g. "3-1", "148/6"
   theirScore  String?
-  outcome     String?  // "WIN" | "LOSS" | "DRAW" — optional
-  summary     String?  // write-up of the game
+  outcome     String? // "WIN" | "LOSS" | "DRAW" — optional
+  summary     String? // write-up of the game
   createdById String?
-  createdBy   User?    @relation("ResultCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdBy   User?          @relation("ResultCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
   scorers     ResultScorer[]
 
   @@index([clubId, date])
@@ -1271,29 +1469,39 @@ model ResultScorer {
 //   metric    – the single number charted & compared (a time in seconds, a
 //               distance in metres, points scored…)
 //   metricTime / metricLowerIsBetter – how to format & rank that metric
+enum ResultType {
+  OFFICIAL
+  CLUB_AGGREGATE
+}
+
 model AthleteResult {
-  id          String   @id @default(cuid())
-  clubId      String
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  userId      String   // the athlete this result belongs to
-  user        User     @relation("AthleteResults", fields: [userId], references: [id], onDelete: Cascade)
-  sport       String   // snapshot of the club's sport when the result was entered
-  date        DateTime // when it was achieved (meet/match day)
-  meet        String?  // meet / competition / opponent
-  eventKey    String   // discipline grouping key (for personal-best grouping)
-  eventLabel  String   // human discipline label
-  data        Json     @default("{}") // sport-specific field values
-  metric      Float?   // the charted/compared number (seconds, metres, points…)
-  metricTime  Boolean  @default(false) // format `metric` as a time (mm:ss.xx)
-  metricLowerIsBetter Boolean @default(false) // true = a lower metric is better (times)
-  ageAtMeet   Int?     // athlete's age on `date`, computed from dateOfBirth at write time
-  seedTime    String?  // raw entered seed/entry time (e.g. "25.20"), swimming only
-  seedMetric  Float?   // seedTime parsed to seconds
-  verified    Boolean  @default(false) // officially verified result
-  createdById String?
-  createdBy   User?    @relation("AthleteResultCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String     @id @default(cuid())
+  clubId              String
+  club                Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  userId              String // the athlete this result belongs to
+  user                User       @relation("AthleteResults", fields: [userId], references: [id], onDelete: Cascade)
+  sport               String // snapshot of the club's sport when the result was entered
+  // OFFICIAL = a real meet/match against other clubs — the only type that
+  // counts toward qualifying standards. CLUB_AGGREGATE = an internal-only
+  // trial/time-trial used to track progress and squad promotion; never
+  // shown alongside official results or compared against standards.
+  resultType          ResultType @default(OFFICIAL)
+  date                DateTime // when it was achieved (meet/match day)
+  meet                String? // meet / competition / opponent
+  eventKey            String // discipline grouping key (for personal-best grouping)
+  eventLabel          String // human discipline label
+  data                Json       @default("{}") // sport-specific field values
+  metric              Float? // the charted/compared number (seconds, metres, points…)
+  metricTime          Boolean    @default(false) // format `metric` as a time (mm:ss.xx)
+  metricLowerIsBetter Boolean    @default(false) // true = a lower metric is better (times)
+  ageAtMeet           Int? // athlete's age on `date`, computed from dateOfBirth at write time
+  seedTime            String? // raw entered seed/entry time (e.g. "25.20"), swimming only
+  seedMetric          Float? // seedTime parsed to seconds
+  verified            Boolean    @default(false) // officially verified result
+  createdById         String?
+  createdBy           User?      @relation("AthleteResultCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   @@index([clubId, userId, eventKey, date])
   @@map("athlete_results")
@@ -1304,23 +1512,23 @@ model AthleteResult {
 // tab; visible read-only to everyone. Results are matched against these by
 // eventKey + gender + the athlete's ageAtMeet falling within [minAge, maxAge].
 model QualifyingStandard {
-  id          String   @id @default(cuid())
-  clubId      String
-  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
-  sport       String   // snapshot of the club's sport when the standard was entered
-  eventKey    String   // same derivation as AthleteResult.eventKey
-  eventLabel  String
-  gender      Gender
-  minAge      Int      // inclusive
-  maxAge      Int      // inclusive; a high number (e.g. 99) means "& over"
-  ageGroupLabel String // display text, e.g. "11-12", "15 & Over"
-  metric      Float    // the qualifying time in seconds
-  metricTime  Boolean  @default(true)
-  metricLowerIsBetter Boolean @default(true)
-  createdById String?
-  createdBy   User?    @relation("QualifyingStandardCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  clubId              String
+  club                Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  sport               String // snapshot of the club's sport when the standard was entered
+  eventKey            String // same derivation as AthleteResult.eventKey
+  eventLabel          String
+  gender              Gender
+  minAge              Int // inclusive
+  maxAge              Int // inclusive; a high number (e.g. 99) means "& over"
+  ageGroupLabel       String // display text, e.g. "11-12", "15 & Over"
+  metric              Float // the qualifying time in seconds
+  metricTime          Boolean  @default(true)
+  metricLowerIsBetter Boolean  @default(true)
+  createdById         String?
+  createdBy           User?    @relation("QualifyingStandardCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([clubId, eventKey, gender])
   @@map("qualifying_standards")

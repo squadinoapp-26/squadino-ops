@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSession } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -7,7 +7,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 export default async function ClubDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePlatformSession();
+  await requirePlatformSessionOrRedirect();
   const { id } = await params;
 
   const club = await prisma.club.findUnique({

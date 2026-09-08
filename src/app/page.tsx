@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSession, PLATFORM_ROLE_LABELS, canManageStaff } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff } from "@/lib/auth";
 import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
 import Link from "next/link";
@@ -13,7 +13,7 @@ const VERSION_BADGE: Record<string, string> = {
 };
 
 export default async function OpsDashboard() {
-  const staff = await requirePlatformSession();
+  const staff = await requirePlatformSessionOrRedirect();
 
   const [clubs, liveStatus] = await Promise.all([
     prisma.club.findMany({

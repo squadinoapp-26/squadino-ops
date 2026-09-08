@@ -1,11 +1,11 @@
-import { requirePlatformSession, canManageStaff } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManageStaff } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function AppManagementPage() {
-  const staff = await requirePlatformSession();
+  const staff = await requirePlatformSessionOrRedirect();
   if (!canManageStaff(staff.role)) redirect("/");
 
   return (

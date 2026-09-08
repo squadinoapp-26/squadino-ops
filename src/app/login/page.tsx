@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function PlatformLoginPage() {
   const router = useRouter();
@@ -51,6 +52,9 @@ export default function PlatformLoginPage() {
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
           {loading ? "Signing in…" : "Sign In"}
         </button>
+        <p className="text-center text-sm text-slate-400">
+          <Link href="/forgot-password" className="text-blue-400 hover:underline font-medium">Forgot password?</Link>
+        </p>
       </form>
     </div>
   );

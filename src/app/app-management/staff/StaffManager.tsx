@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { suggestPassword } from "@/lib/passwordSuggest";
 
 const ROLES = ["SUPER_ADMIN", "ADMIN", "MODERATOR", "CUSTOMER_CARE"];
 const ROLE_LABELS: Record<string, string> = {
@@ -59,26 +60,37 @@ export default function StaffManager({ initialUsers, currentUserId }: { initialU
     }
   }
 
+  const [resettingId, setResettingId] = useState<string | null>(null);
+
   return (
     <div className="space-y-6">
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-3">
         {users.map(user => (
-          <div key={user.id} className="flex items-center gap-3 py-2 border-b border-slate-700 last:border-0">
-            <div className="w-9 h-9 rounded-full bg-blue-700 flex items-center justify-center text-sm font-bold shrink-0">{user.name.charAt(0)}</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium">{user.name}{user.id === currentUserId && <span className="text-xs text-slate-500"> (you)</span>}</p>
-              <p className="text-xs text-slate-400 truncate">{user.email}</p>
+          <div key={user.id} className="py-2 border-b border-slate-700 last:border-0 space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-blue-700 flex items-center justify-center text-sm font-bold shrink-0">{user.name.charAt(0)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{user.name}{user.id === currentUserId && <span className="text-xs text-slate-500"> (you)</span>}</p>
+                <p className="text-xs text-slate-400 truncate">{user.email}</p>
+              </div>
+              <select value={user.role} disabled={user.id === currentUserId} onChange={e => changeRole(user, e.target.value)}
+                className="bg-slate-700 border border-slate-600 text-white rounded-lg px-2 py-1.5 text-xs disabled:opacity-50">
+                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+              <button onClick={() => toggleActive(user)} disabled={user.id === currentUserId}
+                className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors disabled:opacity-50 ${
+                  user.active ? "bg-green-900 text-green-300 hover:bg-red-900 hover:text-red-300" : "bg-red-900 text-red-300 hover:bg-green-900 hover:text-green-300"
+                }`}>
+                {user.active ? "Active" : "Deactivated"}
+              </button>
+              <button onClick={() => setResettingId(resettingId === user.id ? null : user.id)}
+                className="text-xs px-3 py-1.5 rounded-full font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors">
+                Reset password
+              </button>
             </div>
-            <select value={user.role} disabled={user.id === currentUserId} onChange={e => changeRole(user, e.target.value)}
-              className="bg-slate-700 border border-slate-600 text-white rounded-lg px-2 py-1.5 text-xs disabled:opacity-50">
-              {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-            </select>
-            <button onClick={() => toggleActive(user)} disabled={user.id === currentUserId}
-              className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors disabled:opacity-50 ${
-                user.active ? "bg-green-900 text-green-300 hover:bg-red-900 hover:text-red-300" : "bg-red-900 text-red-300 hover:bg-green-900 hover:text-green-300"
-              }`}>
-              {user.active ? "Active" : "Deactivated"}
-            </button>
+            {resettingId === user.id && (
+              <ResetPasswordInline userId={user.id} onDone={() => setResettingId(null)} />
+            )}
           </div>
         ))}
       </div>
@@ -103,6 +115,57 @@ export default function StaffManager({ initialUsers, currentUserId }: { initialU
           {saving ? "Adding…" : "Add Staff"}
         </button>
       </form>
+    </div>
+  );
+}
+
+function ResetPasswordInline({ userId, onDone }: { userId: string; onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+
+  async function submit() {
+    if (password.length < 8) { setError("Enter a password of at least 8 characters."); return; }
+    setBusy(true); setError("");
+    const res = await fetch(`/api/staff/${userId}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) setDone(password);
+    else setError(d.error ?? "Failed to reset password.");
+    setBusy(false);
+  }
+
+  if (done) {
+    return (
+      <div className="bg-green-950/60 border border-green-800 rounded-xl p-3 text-sm text-green-300 space-y-1 ml-12">
+        <p className="font-semibold">✓ Password reset — share it with them:</p>
+        <p>New password: <span className="font-mono">{done}</span></p>
+        <button onClick={onDone} className="text-xs font-medium text-green-400 hover:underline mt-1">Close</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ml-12 space-y-2">
+      <div className="flex gap-2">
+        <input value={password} onChange={e => setPassword(e.target.value)}
+          placeholder="New password (min. 8 characters)"
+          className="flex-1 bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <button type="button" onClick={() => setPassword(suggestPassword())}
+          className="px-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium whitespace-nowrap">🎲 Generate</button>
+      </div>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={submit} disabled={busy || password.length < 8}
+          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-1.5 rounded-lg">
+          {busy ? "Resetting…" : "Set new password"}
+        </button>
+        <button type="button" onClick={onDone} className="text-sm text-slate-400 hover:text-white px-2">Cancel</button>
+      </div>
     </div>
   );
 }
