@@ -77,6 +77,49 @@ export async function sendEmail(msg: OutgoingEmail): Promise<SendResult> {
   }
 }
 
+/** Base URL for links into the main squadino app (not ops itself) — e.g. the
+ * set-password link sent to a newly-provisioned club's owner. Defaults to the
+ * shell host (see squadino's src/lib/hostClub.ts) so this works out of the
+ * box against production without extra config. */
+export function squadinoAppUrl(): string {
+  return (process.env.SQUADINO_APP_URL || "https://app.squadino.com").replace(/\/$/, "");
+}
+
+// Mirrors squadino's own welcomeEmail (src/lib/email.ts) — used when ops
+// manually provisions a club (sales-assisted onboarding), same as squadino's
+// /api/provisioning does for Stripe-driven signups, so both paths land the
+// new owner on an identical first-run experience.
+export function welcomeEmail(setPasswordUrl: string, clubName: string, ttlMinutes: number): OutgoingEmail {
+  return {
+    to: "", // filled in by the caller
+    subject: `Welcome to SQUADINO — set up your ${clubName} account`,
+    text: [
+      `Your SQUADINO account for ${clubName} is ready.`,
+      "",
+      "Set your password to sign in:",
+      setPasswordUrl,
+      "",
+      `The link works once and expires in ${ttlMinutes} minutes — if it expires, use "Forgot password" on the sign-in page.`,
+    ].join("\n"),
+    html: `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+        <h2 style="margin:0 0 12px">Welcome to SQUADINO</h2>
+        <p style="color:#475569;line-height:1.5">
+          Your account for <strong>${clubName}</strong> is ready. Set a password to sign in.
+        </p>
+        <p style="margin:24px 0">
+          <a href="${setPasswordUrl}" style="background:#e31837;color:#fff;text-decoration:none;font-weight:600;padding:12px 24px;border-radius:12px;display:inline-block">
+            Set your password
+          </a>
+        </p>
+        <p style="color:#64748b;font-size:13px;line-height:1.5">
+          The link works once and expires in ${ttlMinutes} minutes — if it expires, use "Forgot password" on the sign-in page.
+        </p>
+        <p style="color:#94a3b8;font-size:12px;word-break:break-all;margin-top:20px">${setPasswordUrl}</p>
+      </div>`,
+  };
+}
+
 export function passwordResetEmail(resetUrl: string, ttlMinutes: number): OutgoingEmail {
   return {
     to: "", // filled in by the caller
