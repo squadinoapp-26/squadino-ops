@@ -55,6 +55,12 @@ export default function PlatformLoginPage() {
         <p className="text-center text-sm text-slate-400">
           <Link href="/forgot-password" className="text-blue-400 hover:underline font-medium">Forgot password?</Link>
         </p>
+        {/* This console is for platform staff only — club members who land
+            here (mistyped URL, old link, etc.) need a way back to the app. */}
+        <p className="text-center text-xs text-slate-500 pt-3 border-t border-slate-700">
+          Looking for your club instead?{" "}
+          <a href="https://app.squadino.com" className="text-blue-400 hover:underline font-medium">Go to app.squadino.com →</a>
+        </p>
       </form>
     </div>
   );
