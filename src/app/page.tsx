@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients } from "@/lib/auth";
 import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
+import SignOutButton from "@/components/SignOutButton";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,11 @@ export default async function OpsDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {canManageClients(staff.role) && (
+            <Link href="/clubs/new" className="bg-blue-600 hover:bg-blue-700 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors">
+              + New Client
+            </Link>
+          )}
           {canManageStaff(staff.role) && (
             <Link href="/app-management" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
               App Management
@@ -49,11 +55,7 @@ export default async function OpsDashboard() {
             <p className="text-sm font-medium">{staff.name}</p>
             <p className="text-xs text-slate-400">{PLATFORM_ROLE_LABELS[staff.role] ?? staff.role}</p>
           </div>
-          <form action="/api/logout" method="POST">
-            <button className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
-              Sign Out
-            </button>
-          </form>
+          <SignOutButton className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors" />
         </div>
       </div>
 

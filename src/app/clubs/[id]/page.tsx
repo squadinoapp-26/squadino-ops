@@ -4,12 +4,16 @@ import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import ClubPlanEditor from "./ClubPlanEditor";
+import ClubUrlEditor from "./ClubUrlEditor";
+import ClubUsersList from "./ClubUsersList";
+import SignOutButton from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClubDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClubDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string }> }) {
   const staff = await requirePlatformSessionOrRedirect();
   const { id } = await params;
+  const { created } = await searchParams;
 
   const [club, packages] = await Promise.all([
     prisma.club.findUnique({
@@ -39,15 +43,36 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ id:
           {club.logoUrl && <img src={club.logoUrl} alt={club.name} className="w-8 h-8 rounded-lg object-cover" />}
           <h1 className="font-bold text-lg">{club.name}</h1>
           <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono">{club.code}</span>
+          <span className="text-xs text-slate-500 font-mono">{club.slug}.squadino.com</span>
         </div>
+        <SignOutButton className="ml-auto text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors" />
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-8">
+        {created && (
+          <div className="bg-green-900/40 border border-green-700 rounded-2xl p-4 text-sm text-green-200">
+            <p className="font-semibold">Client created.</p>
+            <p className="mt-1 text-green-300">
+              An email has gone out to the owner to set their password. The subdomain{" "}
+              <span className="font-mono">{club.slug}.squadino.com</span> is reserved but not live yet — add the DNS
+              record + Vercel custom domain, then turn on &quot;Subdomain is live&quot; from squadino&apos;s own
+              /platform club editor. Until then the owner signs in at app.squadino.com.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-4">
           <Stat label="Users" value={club._count.users} />
           <Stat label="Events" value={club._count.events} />
           <Stat label="News Posts" value={club._count.news} />
         </div>
+
+        <ClubUrlEditor
+          clubId={club.id}
+          initialSlug={club.slug}
+          initialSubdomainReady={club.subdomainReady}
+          initialCustomDomain={club.customDomain}
+        />
 
         {canManagePackages(staff.role) ? (
           <ClubPlanEditor
@@ -71,35 +96,15 @@ export default async function ClubDetailPage({ params }: { params: Promise<{ id:
 
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h2 className="font-semibold mb-4 text-slate-200">Recent Users</h2>
-          <div className="space-y-2">
-            {club.users
+          <ClubUsersList
+            users={club.users
               .map(user => ({ user, presence: presenceFor(user.lastSeenAt, user.sessions[0]) }))
               .sort((a, b) => Number(b.presence.online) - Number(a.presence.online))
-              .map(({ user, presence: { online, location } }) => {
-              return (
-                <div key={user.id} className="flex items-center gap-3 py-2 border-b border-slate-700 last:border-0">
-                  <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-sm font-bold">{user.name.charAt(0)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{user.name}</p>
-                    <p className="text-xs text-slate-400">{user.email}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-xs font-medium flex items-center justify-end gap-1.5 ${online ? "text-green-400" : "text-slate-500"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-green-400" : "bg-slate-600"}`} />
-                      {online ? "Online" : "Offline"}
-                    </span>
-                    {location && <p className="text-xs text-slate-500 mt-0.5">{location}</p>}
-                  </div>
-                  <span className="text-xs text-slate-400">{user.role}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    user.status === "ACTIVE" ? "bg-green-900 text-green-300" :
-                    user.status === "PENDING" ? "bg-yellow-900 text-yellow-300" : "bg-red-900 text-red-300"
-                  }`}>{user.status}</span>
-                </div>
-              );
-            })}
-            {club.users.length === 0 && <p className="text-slate-500 text-sm">No users yet.</p>}
-          </div>
+              .map(({ user, presence: { online, location } }) => ({
+                id: user.id, name: user.name, email: user.email, role: user.role, status: user.status,
+                online, location,
+              }))}
+          />
         </div>
       </div>
     </div>

@@ -126,10 +126,10 @@ enum ShiftCompletionStatus {
 model Package {
   id         String   @id @default(cuid())
   key        String   @unique // stable slug, e.g. "starter" — used for defaults, never shown to users
-  name       String   // display name, e.g. "Growth"
-  userCap    Int?     // max members; null = unlimited
+  name       String // display name, e.g. "Growth"
+  userCap    Int? // max members; null = unlimited
   priceCents Int      @default(0)
-  trialDays  Int?     // e.g. 14 for the Free Trial package; null = not trial-based
+  trialDays  Int? // e.g. 14 for the Free Trial package; null = not trial-based
   active     Boolean  @default(true) // inactive packages stay assigned to existing clubs but can't be picked for new ones
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
@@ -145,7 +145,17 @@ model Package {
 model Club {
   id                      String     @id @default(cuid())
   name                    String
-  slug                    String     @unique
+  slug                    String     @unique // also the club's subdomain segment, e.g. "wantirnatc" -> wantirnatc.squadino.com
+  // Set true only once an admin has actually created the {slug}.squadino.com
+  // DNS record and added it as a Vercel custom domain — gates every place
+  // that would otherwise redirect a member to a subdomain that doesn't
+  // resolve yet. See src/lib/hostClub.ts and src/proxy.ts.
+  subdomainReady          Boolean    @default(false)
+  // Optional: a club's own domain (e.g. "wantirnatennisclub.com.au"), added
+  // as an extra Vercel custom domain on this same project. Requests arriving
+  // on it are 301-redirected to {slug}.squadino.com — it never serves the
+  // app directly. Null = no custom domain, subdomain-only.
+  customDomain            String?    @unique
   code                    String     @unique // short code users type on login e.g. "MONBULK"
   sport                   String     @default("Swimming")
   sports                  String[]   @default([])
@@ -321,8 +331,8 @@ model User {
   teams                      Team[]               @relation("TeamMembers") // teams this athlete belongs to
   resultsCreated             Result[]             @relation("ResultCreatedBy")
   resultScorerEntries        ResultScorer[]       @relation("ResultScorerUser") // matches this athlete scored in
-  athleteResults             AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
-  athleteResultsCreated      AthleteResult[]      @relation("AthleteResultCreatedBy")
+  athleteResults              AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
+  athleteResultsCreated       AthleteResult[]      @relation("AthleteResultCreatedBy")
   qualifyingStandardsCreated QualifyingStandard[] @relation("QualifyingStandardCreatedBy")
 
   safeguardingRequestsAsChild   SafeguardingRequest[] @relation("SafeguardingChild")
@@ -420,10 +430,16 @@ model FaceProfile {
   userId String? // set when tagged against a registered club member
   user   User?   @relation("FaceProfileMember", fields: [userId], references: [id], onDelete: SetNull)
 
-  shouldBlur Boolean @default(true) // whether future uploads should auto-blur this person
+  shouldBlur      Boolean @default(true) // whether future uploads should auto-blur this person
   // One or more 128-d face-recognition descriptors (face-api.js), captured
   // from each photo this person was tagged in — more angles, better matches.
-  descriptors Json
+  // Encrypted at rest (AES-256-GCM, see src/lib/faceEncryption.ts) since this
+  // is biometric data, often of children — a database-only compromise must
+  // not expose it. Decrypt only where actually needed (tagging, matching);
+  // never send to a client. descriptorCount mirrors the array length in
+  // plaintext so the admin list can show "N photos" without decrypting.
+  descriptors     String
+  descriptorCount Int     @default(1)
 
   taggedById String?
   taggedBy   User?   @relation("FaceProfileTaggedBy", fields: [taggedById], references: [id], onDelete: SetNull)
@@ -549,7 +565,7 @@ model PlatformUser {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  sessions PlatformSession[]
+  sessions               PlatformSession[]
   reviewedSignupRequests SignupRequest[]
 
   @@map("platform_users")
