@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canViewLogs } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canViewLogs, canManageSportsList } from "@/lib/auth";
 import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
 import SignOutButton from "@/components/SignOutButton";
@@ -46,6 +46,12 @@ export default async function OpsDashboard() {
             Signups
             {pendingSignups > 0 && <span className="ml-2 rounded-full bg-amber-900 px-2 py-0.5 text-xs font-bold text-amber-300">{pendingSignups}</span>}
           </Link>
+          {canManageSportsList(staff.role) && (
+            <>
+              <Link href="/sports" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">Sports</Link>
+              <Link href="/restricted-words" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">Restricted words</Link>
+            </>
+          )}
           {canViewLogs(staff.role) && (
             <Link href="/logs" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
               Logs

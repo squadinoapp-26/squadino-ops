@@ -4,6 +4,7 @@ import { requirePlatformSession, canManageStaff } from "@/lib/auth";
 import { hashPassword } from "@/lib/password";
 import { passwordProblem } from "@/lib/passwordPolicy";
 import { wasPasswordUsed, recordPasswordHistory } from "@/lib/passwordHistory";
+import { recordAudit } from "@/lib/auditLog.server";
 
 // Admin-set password reset for another staff account. The admin supplies (or
 // generates) a new password to share with them directly — separate from the
@@ -31,5 +32,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   ]);
   await recordPasswordHistory(target.email, target.passwordHash);
 
+  await recordAudit(staff, {
+    action: "staff.password",
+    targetType: "staff",
+    targetId: id,
+    targetLabel: `${target.name} (${target.email})`,
+  });
   return NextResponse.json({ ok: true });
 }

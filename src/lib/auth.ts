@@ -124,3 +124,17 @@ export function canEditSignups(role: string | null | undefined) {
 export function canViewLogs(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
 }
+
+// Deactivating, reactivating and deleting clubs.
+export function canManageClubStatus(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+// The platform-wide sports list and restricted-words list.
+export function canManageSportsList(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+export function canManageRestrictedWords(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
