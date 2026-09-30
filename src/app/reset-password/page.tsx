@@ -26,7 +26,7 @@ function ResetInner() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (form.next !== form.confirm) { setError("Passwords do not match"); return; }
-    if (form.next.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (form.next.length < 12) { setError("Password must be at least 12 characters"); return; }
 
     setSaving(true);
     setError("");
@@ -101,7 +101,7 @@ function ResetInner() {
           <label className="block text-sm font-medium text-slate-300 mb-1">New password</label>
           <input type="password" required autoComplete="new-password" value={form.next}
             onChange={(e) => setForm({ ...form, next: e.target.value })} className={input} />
-          <p className="text-xs text-slate-500 mt-1">At least 8 characters.</p>
+          <p className="text-xs text-slate-500 mt-1">At least 12 characters.</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1">Confirm new password</label>

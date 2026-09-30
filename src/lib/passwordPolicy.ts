@@ -1,7 +1,7 @@
 // Rules for choosing a new password. Shared by the reset flow and the
 // admin reset-password form so both accept exactly the same thing.
 
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;
 
 /**
  * Returns a message describing what's wrong with a password, or null if it's

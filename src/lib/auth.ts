@@ -10,7 +10,7 @@ const SESSION_TTL_HOURS = 12;
 // reasoning as squadino's own Session/PlatformSession handling (they share
 // this table): a database-only compromise must not hand over ready-to-use
 // session tokens. The raw token lives only in the browser's cookie.
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 

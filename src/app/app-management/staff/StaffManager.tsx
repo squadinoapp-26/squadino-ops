@@ -102,7 +102,7 @@ export default function StaffManager({ initialUsers, currentUserId }: { initialU
             className="bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <input type="email" required placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
             className="bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <input type="password" required minLength={8} placeholder="Temporary password" value={password} onChange={e => setPassword(e.target.value)}
+          <input type="password" required minLength={12} placeholder="Temporary password" value={password} onChange={e => setPassword(e.target.value)}
             className="bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <select value={role} onChange={e => setRole(e.target.value)}
             className="bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -126,7 +126,7 @@ function ResetPasswordInline({ userId, onDone }: { userId: string; onDone: () =>
   const [done, setDone] = useState<string | null>(null);
 
   async function submit() {
-    if (password.length < 8) { setError("Enter a password of at least 8 characters."); return; }
+    if (password.length < 12) { setError("Enter a password of at least 12 characters."); return; }
     setBusy(true); setError("");
     const res = await fetch(`/api/staff/${userId}/reset-password`, {
       method: "POST",
@@ -153,14 +153,14 @@ function ResetPasswordInline({ userId, onDone }: { userId: string; onDone: () =>
     <div className="ml-12 space-y-2">
       <div className="flex gap-2">
         <input value={password} onChange={e => setPassword(e.target.value)}
-          placeholder="New password (min. 8 characters)"
+          placeholder="New password (min. 12 characters)"
           className="flex-1 bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         <button type="button" onClick={() => setPassword(suggestPassword())}
           className="px-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium whitespace-nowrap">🎲 Generate</button>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}
       <div className="flex gap-2">
-        <button type="button" onClick={submit} disabled={busy || password.length < 8}
+        <button type="button" onClick={submit} disabled={busy || password.length < 12}
           className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-1.5 rounded-lg">
           {busy ? "Resetting…" : "Set new password"}
         </button>

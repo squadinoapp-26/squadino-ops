@@ -2,12 +2,13 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { listSports } from "@/lib/sportCatalog.server";
 import { sortSports } from "@/lib/sportCatalog";
-import { getPlatformUser, canManageSportsList } from "@/lib/auth";
+import { getPlatformUser, canManageSportsList, requirePlatformSessionOrRedirect } from "@/lib/auth";
 import SportsManager from "./SportsManager";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformSportsPage() {
+  await requirePlatformSessionOrRedirect();
   await listSports(); // fills an empty table with the defaults first
   const [sports, clubs, viewer] = await Promise.all([
     prisma.sport.findMany({ select: { id: true, name: true, icon: true } }),

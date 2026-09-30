@@ -4,7 +4,7 @@ import Link from "next/link";
 import SignupActions from "./SignupActions";
 import SignupEditor from "./SignupEditor";
 import { isDummyPaymentId } from "@/lib/payment";
-import { getPlatformUser, canReviewSignups, canEditSignups, canViewLogs } from "@/lib/auth";
+import { getPlatformUser, canReviewSignups, canEditSignups, canViewLogs, requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { signupPackageLabel } from "@/lib/signupPackages";
 import { slugify } from "@/lib/subdomain";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
@@ -14,6 +14,7 @@ import { listSportNames } from "@/lib/sportCatalog.server";
 export const dynamic = "force-dynamic";
 
 export default async function SignupDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePlatformSessionOrRedirect();
   const { id } = await params;
   const [signup, viewer] = await Promise.all([
     prisma.signupRequest.findUnique({ where: { id }, include: { reviewedByPlatformUser: { select: { name: true } } } }),

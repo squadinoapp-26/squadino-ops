@@ -6,6 +6,7 @@ import { hashPassword } from "@/lib/password";
 import { createResetToken, RESET_TOKEN_TTL_MINUTES } from "@/lib/passwordReset.server";
 import { sendEmail, welcomeEmail, squadinoAppUrl } from "@/lib/email";
 import { randomBytes } from "crypto";
+import { recordAudit } from "@/lib/auditLog.server";
 
 /**
  * Manually provisions a new client: creates the club, its owner ADMIN
@@ -62,6 +63,14 @@ export async function POST(req: NextRequest) {
     await prisma.club.delete({ where: { id: club.id } }).catch(() => {});
     return NextResponse.json({ error: "Could not create the owner account — check whether that email is already in use" }, { status: 500 });
   }
+
+  await recordAudit(staff, {
+    action: "club.create",
+    targetType: "club",
+    targetId: club.id,
+    targetLabel: club.name,
+    note: `Created by hand (New Client) · code ${club.code} · ${club.slug}.squadino.com · owner ${ownerEmail}`,
+  });
 
   const token = await createResetToken(ownerEmail);
   const setPasswordUrl = `${squadinoAppUrl()}/reset-password?token=${token}`;
