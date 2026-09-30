@@ -5,6 +5,7 @@
 // After any schema change in squadino, copy prisma/schema.prisma over to this
 // file and re-run `npx prisma generate` — never db push/migrate here.
 
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -47,6 +48,9 @@ enum AppVersion {
   FREE
   BASIC
   PRO
+  // An individual coach or personal trainer: up to 50 clients, a trimmed set
+  // of modules plus bookings and workout programmes (see VERSION_MODULES).
+  COACH
 }
 
 enum EventType {
@@ -237,6 +241,15 @@ model Club {
   qualifyingStandards  QualifyingStandard[]
   safeguardingRequests SafeguardingRequest[]
   faceProfiles         FaceProfile[]
+  deactivation         ClubDeactivation?
+  eventTypes           ClubEventType[]
+  bookingSettings      BookingSettings?
+  bookableSessions     BookableSession[]
+  sessionPacks         SessionPack[]
+  packPurchases        PackPurchase[]
+  bookings             Booking[]
+  programmes           Programme[]
+  workoutLogs          WorkoutLog[]
 
   @@map("clubs")
 }
@@ -331,8 +344,8 @@ model User {
   teams                      Team[]               @relation("TeamMembers") // teams this athlete belongs to
   resultsCreated             Result[]             @relation("ResultCreatedBy")
   resultScorerEntries        ResultScorer[]       @relation("ResultScorerUser") // matches this athlete scored in
-  athleteResults              AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
-  athleteResultsCreated       AthleteResult[]      @relation("AthleteResultCreatedBy")
+  athleteResults             AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
+  athleteResultsCreated      AthleteResult[]      @relation("AthleteResultCreatedBy")
   qualifyingStandardsCreated QualifyingStandard[] @relation("QualifyingStandardCreatedBy")
 
   safeguardingRequestsAsChild   SafeguardingRequest[] @relation("SafeguardingChild")
@@ -340,6 +353,11 @@ model User {
   safeguardingRequestsResolved  SafeguardingRequest[] @relation("SafeguardingResolvedBy")
   faceProfileAsMember           FaceProfile[]         @relation("FaceProfileMember")
   faceProfilesTagged            FaceProfile[]         @relation("FaceProfileTaggedBy")
+
+  bookings             Booking[]             @relation("BookingAttendee") // sessions this client is booked into
+  packPurchases        PackPurchase[]        @relation("PackOwner") // class packs this client holds
+  programmeAssignments ProgrammeAssignment[] @relation("ProgrammeAssignee")
+  workoutLogs          WorkoutLog[]          @relation("WorkoutLogOwner")
 
   @@unique([clubId, email])
   @@unique([clubId, username])
@@ -629,6 +647,66 @@ model SignupRequest {
   @@map("signup_requests")
 }
 
+// When a club was deactivated from the platform console, so it can be
+// offered for permanent deletion 12 months later (src/lib/clubStatus.ts).
+// A row exists only while the club is inactive; reactivating deletes it.
+// Kept out of the clubs table on purpose: a new column there would break
+// every club query if the code deployed before `db-sync.cmd` ran.
+model ClubDeactivation {
+  clubId          String   @id
+  club            Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  deactivatedAt   DateTime @default(now())
+  deactivatedById String?
+  deactivatedBy   String?
+
+  @@map("club_deactivations")
+}
+
+// One row per change made in the platform console (/platform): editing or
+// reviewing a signup, creating/editing/deleting a club, setting a subdomain
+// up, sending a setup email, changing the sports list. Shown read-only at
+// /platform/logs to super admins and admins. Rows are only ever inserted —
+// nothing in the app updates or deletes them (see src/lib/auditLog.server.ts).
+model PlatformAuditLog {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  // Who made the change, copied rather than linked, so a log line never
+  // changes or disappears if that staff account is later renamed or removed.
+  actorId     String?
+  actorName   String
+  actorRole   String
+  // What was done, e.g. "signup.edit" — see AUDIT_ACTIONS in src/lib/auditLog.ts.
+  action      String
+  // What it was done to: "signup" | "club" | "sport" | "word" | "staff", its id, and its name at
+  // the time (so the line still reads well after the item is deleted).
+  targetType  String
+  targetId    String?
+  targetLabel String
+  // Field-level changes: [{ field, label, from, to }]. Null for actions that
+  // don't change fields (e.g. sending a setup email).
+  changes     Json?
+  note        String?
+
+  @@index([createdAt])
+  @@index([targetId])
+  @@map("platform_audit_logs")
+}
+
+// The platform-wide list of sports every sport picker offers — website
+// signup, the get-started wizard, club App Settings and the platform club
+// editor. Platform super admins and admins add to it at /platform/sports.
+// Clubs store sport *names* (Club.sport / Club.sports), not references to
+// rows here, so removing a sport never changes a club that already has it.
+// Filled with a default list on first read (see src/lib/sportCatalog.ts).
+model Sport {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  icon      String   @default("🏅")
+  createdAt DateTime @default(now())
+
+  @@map("sports")
+}
+
 // A record of a distinct app visit by a member, so admins can see when and how
 // often people use the app. A new row is written when a member opens the app
 // after a gap (see recordAccess in lib/access); rapid navigation within one
@@ -744,6 +822,7 @@ model Event {
   comments       EventComment[]
   rsvps          EventRSVP[]
   rsvpTokens     RsvpActionToken[]
+  typeLabel      EventTypeLabel?
   // When the pre-event reminder was dispatched, so the cron never sends twice.
   reminderSentAt DateTime?
   createdAt      DateTime          @default(now())
@@ -752,6 +831,32 @@ model Event {
   @@index([clubId, startDate])
   @@index([teamId, startDate])
   @@map("events")
+}
+
+// A club's own event types ("Club Champs", "Presentation Night"…). New clubs
+// start with none; one is added the first time an admin saves an event with
+// a type the club hasn't used before. See src/lib/eventTypes.server.ts.
+model ClubEventType {
+  id        String   @id @default(cuid())
+  clubId    String
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([clubId, name])
+  @@map("club_event_types")
+}
+
+// The club-chosen type name of one event. Event.type (the old fixed list) is
+// kept for existing events; an event with a name here shows that instead.
+// A separate table rather than a column on events so event pages keep
+// working if the code deploys before `db-sync.cmd` adds it.
+model EventTypeLabel {
+  eventId String @id
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name    String
+
+  @@map("event_type_labels")
 }
 
 model EventComment {
@@ -1410,6 +1515,19 @@ model BannedWord {
   @@map("banned_words")
 }
 
+// The restricted-words list every club gets, managed by platform super
+// admins and admins at /platform/restricted-words. Each club adds its own
+// on top (BannedWord). Filled with DEFAULT_BANNED_WORDS on first read (see
+// src/lib/moderation.ts); if the table can't be read, that list is used.
+model PlatformBannedWord {
+  id        String   @id @default(cuid())
+  word      String   @unique
+  addedBy   String?
+  createdAt DateTime @default(now())
+
+  @@map("platform_banned_words")
+}
+
 model ContentViolation {
   id        String   @id @default(cuid())
   clubId    String
@@ -1559,4 +1677,225 @@ model QualifyingStandard {
 
   @@index([clubId, eventKey, gender])
   @@map("qualifying_standards")
+}
+
+// ─── BOOKINGS & SESSION PAYMENTS (Coach plan, Scale, Full) ──────────────────
+// A coach (or club) puts up bookable sessions with a number of places and a
+// price; clients book a place and either use a class-pack session or owe the
+// price. Money is tracked here but changes hands outside the app for now
+// (cash, bank transfer, the coach's own card machine): the coach marks what
+// they've received. Online card payments are a later step.
+
+// One row per club: its cancellation rules and how clients should pay.
+model BookingSettings {
+  clubId              String   @id
+  club                Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  // How close to the start a client can still cancel for free.
+  cancelCutoffHours   Int      @default(24)
+  // The coach's choice for a cancellation inside the cut-off: true = still
+  // charged (uses a pack session / stays owed), false = always free.
+  lateCancelCharged   Boolean  @default(true)
+  // Shown to clients who owe money, e.g. bank details or a PayID.
+  paymentInstructions String?
+  // Where the sessions happen: session times are entered and shown in this
+  // time zone, whoever is looking and wherever the server runs.
+  timeZone            String   @default("Australia/Melbourne")
+  updatedAt           DateTime @updatedAt
+
+  @@map("booking_settings")
+}
+
+model BookableSession {
+  id          String    @id @default(cuid())
+  clubId      String
+  club        Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime
+  endsAt      DateTime
+  capacity    Int // number of places; 1 = a private lesson
+  priceCents  Int       @default(0)
+  // Sessions created together as a weekly repeat share this id.
+  seriesId    String?
+  cancelledAt DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  bookings Booking[]
+
+  @@index([clubId, startsAt])
+  @@map("bookable_sessions")
+}
+
+enum BookingStatus {
+  BOOKED
+  CANCELLED // cancelled in time (or the coach waived it) — not charged
+  LATE_CANCELLED // cancelled inside the cut-off while the coach charges for that
+  ATTENDED
+  NO_SHOW
+}
+
+// How a booking or class pack is (or isn't) paid for.
+enum PaymentState {
+  UNPAID
+  PAID // the coach marked the money received
+  PACK // a booking covered by a class-pack session
+  WAIVED // the coach let it go
+}
+
+model Booking {
+  id             String          @id @default(cuid())
+  sessionId      String
+  session        BookableSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  clubId         String
+  club           Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  // The client attending (a parent books for their child with the child's id).
+  userId         String
+  user           User            @relation("BookingAttendee", fields: [userId], references: [id], onDelete: Cascade)
+  bookedById     String?
+  status         BookingStatus   @default(BOOKED)
+  // The session's price when it was booked, so a later price change doesn't
+  // alter what's owed.
+  priceCents     Int
+  payment        PaymentState    @default(UNPAID)
+  packPurchaseId String?
+  packPurchase   PackPurchase?   @relation(fields: [packPurchaseId], references: [id], onDelete: SetNull)
+  paymentMethod  String? // "cash" | "transfer" | "card" | "other" once PAID
+  paidAt         DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([sessionId, userId])
+  @@index([clubId, userId])
+  @@map("bookings")
+}
+
+// A class pack the coach sells, e.g. "10 sessions" for $250.
+model SessionPack {
+  id         String   @id @default(cuid())
+  clubId     String
+  club       Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name       String
+  sessions   Int
+  priceCents Int
+  validDays  Int? // null = never expires
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  purchases PackPurchase[]
+
+  @@map("session_packs")
+}
+
+// A client's own pack. Name, size and price are copied from the SessionPack
+// so editing the pack later doesn't change packs already sold. Sessions used
+// = its bookings that weren't cancelled in time.
+model PackPurchase {
+  id            String       @id @default(cuid())
+  clubId        String
+  club          Club         @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User         @relation("PackOwner", fields: [userId], references: [id], onDelete: Cascade)
+  packId        String?
+  pack          SessionPack? @relation(fields: [packId], references: [id], onDelete: SetNull)
+  name          String
+  sessions      Int
+  priceCents    Int
+  payment       PaymentState @default(UNPAID) // UNPAID | PAID | WAIVED
+  paymentMethod String?
+  paidAt        DateTime?
+  expiresAt     DateTime?
+  createdById   String?
+  createdAt     DateTime     @default(now())
+
+  bookings Booking[]
+
+  @@index([clubId, userId])
+  @@map("pack_purchases")
+}
+
+// ─── WORKOUT PROGRAMMES (Coach plan, Scale, Full) ───────────────────────────
+// A coach builds a programme of exercises, assigns it to clients, and clients
+// log the workouts they do so the coach can follow their progress.
+
+model Programme {
+  id          String   @id @default(cuid())
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  exercises   ProgrammeExercise[]
+  assignments ProgrammeAssignment[]
+  workoutLogs WorkoutLog[]
+
+  @@index([clubId])
+  @@map("programmes")
+}
+
+model ProgrammeExercise {
+  id          String    @id @default(cuid())
+  programmeId String
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  order       Int
+  day         String? // groups exercises, e.g. "Day A" or "Monday"
+  name        String
+  sets        Int?
+  reps        String? // text so a range like "8-10" or "30 sec" fits
+  weight      String? // e.g. "40 kg" or "bodyweight"
+  notes       String?
+
+  @@map("programme_exercises")
+}
+
+model ProgrammeAssignment {
+  id           String    @id @default(cuid())
+  programmeId  String
+  programme    Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation("ProgrammeAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  assignedById String?
+  createdAt    DateTime  @default(now())
+
+  @@unique([programmeId, userId])
+  @@map("programme_assignments")
+}
+
+model WorkoutLog {
+  id           String     @id @default(cuid())
+  clubId       String
+  club         Club       @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation("WorkoutLogOwner", fields: [userId], references: [id], onDelete: Cascade)
+  programmeId  String?
+  programme    Programme? @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  performedAt  DateTime
+  notes        String?
+  // The coach's reply on this workout.
+  coachComment String?
+  createdAt    DateTime   @default(now())
+
+  entries WorkoutLogEntry[]
+
+  @@index([clubId, userId, performedAt])
+  @@map("workout_logs")
+}
+
+model WorkoutLogEntry {
+  id           String     @id @default(cuid())
+  logId        String
+  log          WorkoutLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  order        Int
+  exerciseName String
+  sets         Int?
+  reps         String?
+  weightKg     Float? // heaviest weight used, for the progress view
+  notes        String?
+
+  @@map("workout_log_entries")
 }
