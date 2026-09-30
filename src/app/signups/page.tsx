@@ -1,9 +1,11 @@
+import { requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function PendingSignupsPage() {
+  await requirePlatformSessionOrRedirect();
   const [signups, recent] = await Promise.all([
     prisma.signupRequest.findMany({
       where: { status: "PENDING" },

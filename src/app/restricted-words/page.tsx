@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { listPlatformWords } from "@/lib/restrictedWordsList";
-import { getPlatformUser, canManageRestrictedWords } from "@/lib/auth";
+import { getPlatformUser, canManageRestrictedWords, requirePlatformSessionOrRedirect } from "@/lib/auth";
 import RestrictedWordsManager from "./RestrictedWordsManager";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformRestrictedWordsPage() {
+  await requirePlatformSessionOrRedirect();
   const [words, viewer] = await Promise.all([listPlatformWords(), getPlatformUser()]);
   // An empty id means the table couldn't be read and the built-in list is
   // showing (the database update hasn't run yet) — shown read-only.
