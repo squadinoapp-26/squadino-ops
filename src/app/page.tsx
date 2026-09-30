@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canViewLogs } from "@/lib/auth";
 import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
 import SignOutButton from "@/components/SignOutButton";
@@ -16,12 +16,13 @@ const VERSION_BADGE: Record<string, string> = {
 export default async function OpsDashboard() {
   const staff = await requirePlatformSessionOrRedirect();
 
-  const [clubs, liveStatus] = await Promise.all([
+  const [clubs, liveStatus, pendingSignups] = await Promise.all([
     prisma.club.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { users: true } } },
     }),
     getLiveStatus(),
+    prisma.signupRequest.count({ where: { status: "PENDING" } }),
   ]);
 
   const totals = {
@@ -41,6 +42,15 @@ export default async function OpsDashboard() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <Link href="/signups" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+            Signups
+            {pendingSignups > 0 && <span className="ml-2 rounded-full bg-amber-900 px-2 py-0.5 text-xs font-bold text-amber-300">{pendingSignups}</span>}
+          </Link>
+          {canViewLogs(staff.role) && (
+            <Link href="/logs" className="text-sm text-slate-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors">
+              Logs
+            </Link>
+          )}
           {canManageClients(staff.role) && (
             <Link href="/clubs/new" className="bg-blue-600 hover:bg-blue-700 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors">
               + New Client

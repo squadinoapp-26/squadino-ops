@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, canManagePackages } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManagePackages, canReviewSignups } from "@/lib/auth";
+import { ROOT_DOMAIN } from "@/lib/hostClub";
+import { vercelDomainsConfigured } from "@/lib/vercelDomains";
+import ClubSetupPanel from "./ClubSetupPanel";
 import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -35,6 +38,13 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
 
   if (!club) notFound();
 
+  // Admins who have never signed in: for a newly approved signup, the owner still waiting on their setup email.
+  const pendingOwners = await prisma.user.findMany({
+    where: { clubId: club.id, role: { in: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE", lastSeenAt: null },
+    select: { email: true },
+  });
+  const needsSetup = club.active && (!club.subdomainReady || pendingOwners.length > 0);
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="border-b border-slate-800 px-6 py-4 flex items-center gap-4">
@@ -59,6 +69,17 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
               /platform club editor. Until then the owner signs in at app.squadino.com.
             </p>
           </div>
+        )}
+
+        {needsSetup && (
+          <ClubSetupPanel
+            clubId={club.id}
+            host={`${club.slug}.${ROOT_DOMAIN}`}
+            subdomainReady={club.subdomainReady}
+            pendingOwners={pendingOwners.map((u) => u.email)}
+            canManage={canReviewSignups(staff.role)}
+            autoSubdomain={vercelDomainsConfigured()}
+          />
         )}
 
         <div className="grid grid-cols-3 gap-4">
