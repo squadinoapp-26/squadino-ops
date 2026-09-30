@@ -103,3 +103,38 @@ export const PLATFORM_ROLE_LABELS: Record<string, string> = {
   MODERATOR: "Moderator",
   CUSTOMER_CARE: "Customer Care",
 };
+
+// Who is signed in, for actions that depend on their role (same shape squadino's
+// /platform console used).
+export async function getPlatformUser() {
+  return getPlatformSession();
+}
+
+// Signups, subdomains and setup emails: Super Admin, Admin and Moderator. Customer
+// Care can look but not act.
+export function canReviewSignups(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR"].includes(role);
+}
+
+// Correcting a pending signup's details, and reading the change Logs.
+export function canEditSignups(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+export function canViewLogs(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+// Deactivating, reactivating and deleting clubs.
+export function canManageClubStatus(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+// The platform-wide sports list and restricted-words list.
+export function canManageSportsList(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+export function canManageRestrictedWords(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}

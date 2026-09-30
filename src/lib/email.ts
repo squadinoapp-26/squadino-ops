@@ -85,11 +85,19 @@ export function squadinoAppUrl(): string {
   return (process.env.SQUADINO_APP_URL || "https://app.squadino.com").replace(/\/$/, "");
 }
 
-// Mirrors squadino's own welcomeEmail (src/lib/email.ts) — used when ops
-// manually provisions a club (sales-assisted onboarding), same as squadino's
-// /api/provisioning does for Stripe-driven signups, so both paths land the
-// new owner on an identical first-run experience.
-export function welcomeEmail(setPasswordUrl: string, clubName: string, ttlMinutes: number): OutgoingEmail {
+/**
+ * The setup email a platform admin sends a new club's owner once the club
+ * is approved (see sendOwnerSetupEmails in src/lib/clubSetupEmails.ts): a
+ * one-time "set your password" link, plus — when given — where to sign in
+ * afterwards and the link members use to join.
+ */
+export function welcomeEmail(
+  setPasswordUrl: string,
+  clubName: string,
+  ttlMinutes: number,
+  links?: { signInUrl: string; inviteUrl: string },
+): OutgoingEmail {
+  const safeName = escapeHtml(clubName);
   return {
     to: "", // filled in by the caller
     subject: `Welcome to SQUADINO — set up your ${clubName} account`,
@@ -100,12 +108,15 @@ export function welcomeEmail(setPasswordUrl: string, clubName: string, ttlMinute
       setPasswordUrl,
       "",
       `The link works once and expires in ${ttlMinutes} minutes — if it expires, use "Forgot password" on the sign-in page.`,
+      ...(links
+        ? ["", "After that, sign in at:", links.signInUrl, "", "Members join your club with this link:", links.inviteUrl]
+        : []),
     ].join("\n"),
     html: `
       <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
         <h2 style="margin:0 0 12px">Welcome to SQUADINO</h2>
         <p style="color:#475569;line-height:1.5">
-          Your account for <strong>${clubName}</strong> is ready. Set a password to sign in.
+          Your account for <strong>${safeName}</strong> is ready. Set a password to sign in.
         </p>
         <p style="margin:24px 0">
           <a href="${setPasswordUrl}" style="background:#e31837;color:#fff;text-decoration:none;font-weight:600;padding:12px 24px;border-radius:12px;display:inline-block">
@@ -114,8 +125,47 @@ export function welcomeEmail(setPasswordUrl: string, clubName: string, ttlMinute
         </p>
         <p style="color:#64748b;font-size:13px;line-height:1.5">
           The link works once and expires in ${ttlMinutes} minutes — if it expires, use "Forgot password" on the sign-in page.
-        </p>
+        </p>${links ? `
+        <p style="color:#475569;line-height:1.5;margin-top:20px">
+          After that, sign in at <a href="${links.signInUrl}" style="color:#2563eb">${links.signInUrl}</a>.<br>
+          Members join your club with this link:<br>
+          <a href="${links.inviteUrl}" style="color:#2563eb;word-break:break-all">${links.inviteUrl}</a>
+        </p>` : ""}
         <p style="color:#94a3b8;font-size:12px;word-break:break-all;margin-top:20px">${setPasswordUrl}</p>
+      </div>`,
+  };
+}
+
+// Club names on this path come straight from a self-serve signup form, so
+// escape them before they go into HTML.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Sent to a club's admins when a platform admin switches its own subdomain on. */
+export function subdomainLiveEmail(clubName: string, clubUrl: string): OutgoingEmail {
+  return {
+    to: "", // filled in by the caller
+    subject: `${clubName}'s own SQUADINO web address is live`,
+    text: [
+      `Good news: ${clubName} now has its own web address on SQUADINO.`,
+      "",
+      clubUrl,
+      "",
+      "Sign in there from now on, and share it with your members.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f172a">
+        <h2 style="margin:0 0 12px">Your web address is live</h2>
+        <p style="color:#475569;line-height:1.5">
+          <strong>${escapeHtml(clubName)}</strong> now has its own web address on SQUADINO. Sign in there from now on, and share it with your members.
+        </p>
+        <p style="margin:24px 0">
+          <a href="${clubUrl}" style="background:#e31837;color:#fff;text-decoration:none;font-weight:600;padding:12px 24px;border-radius:12px;display:inline-block">
+            Open ${escapeHtml(clubName)}
+          </a>
+        </p>
+        <p style="color:#94a3b8;font-size:12px;word-break:break-all;margin-top:20px">${clubUrl}</p>
       </div>`,
   };
 }

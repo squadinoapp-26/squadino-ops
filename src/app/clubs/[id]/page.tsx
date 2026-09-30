@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, canManagePackages } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManagePackages, canReviewSignups, canManageClubStatus } from "@/lib/auth";
+import { ROOT_DOMAIN } from "@/lib/hostClub";
+import { vercelDomainsConfigured } from "@/lib/vercelDomains";
+import ClubSetupPanel from "./ClubSetupPanel";
+import ClubStatusPanel from "./ClubStatusPanel";
+import { canDeleteClub, deletableFrom, monthsBetween } from "@/lib/clubStatus";
+import { getDeactivationDates, isClubNeverUsed } from "@/lib/clubStatus.server";
 import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +15,8 @@ import ClubUsersList from "./ClubUsersList";
 import SignOutButton from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
+
+const melbourneDate = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", dateStyle: "long" });
 
 export default async function ClubDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ created?: string }> }) {
   const staff = await requirePlatformSessionOrRedirect();
@@ -35,6 +43,15 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
 
   if (!club) notFound();
 
+  // Admins who have never signed in: for a newly approved signup, the owner still waiting on their setup email.
+  const pendingOwners = await prisma.user.findMany({
+    where: { clubId: club.id, role: { in: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE", lastSeenAt: null },
+    select: { email: true },
+  });
+  const deactivatedAt = (await getDeactivationDates([club]))?.get(club.id) ?? null;
+  const neverUsed = await isClubNeverUsed(club.id);
+  const needsSetup = club.active && (!club.subdomainReady || pendingOwners.length > 0);
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="border-b border-slate-800 px-6 py-4 flex items-center gap-4">
@@ -60,6 +77,29 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
             </p>
           </div>
         )}
+
+        {needsSetup && (
+          <ClubSetupPanel
+            clubId={club.id}
+            host={`${club.slug}.${ROOT_DOMAIN}`}
+            subdomainReady={club.subdomainReady}
+            pendingOwners={pendingOwners.map((u) => u.email)}
+            canManage={canReviewSignups(staff.role)}
+            autoSubdomain={vercelDomainsConfigured()}
+          />
+        )}
+
+        <ClubStatusPanel
+          clubId={club.id}
+          clubName={club.name}
+          active={club.active}
+          deactivatedOn={deactivatedAt ? melbourneDate.format(deactivatedAt) : null}
+          monthsInactive={deactivatedAt ? monthsBetween(deactivatedAt, new Date()) : null}
+          deletableOn={deactivatedAt ? melbourneDate.format(deletableFrom(deactivatedAt)) : null}
+          neverUsed={neverUsed}
+          canDelete={canDeleteClub({ active: club.active, deactivatedAt, neverUsed })}
+          canManage={canManageClubStatus(staff.role)}
+        />
 
         <div className="grid grid-cols-3 gap-4">
           <Stat label="Users" value={club._count.users} />
