@@ -15,7 +15,9 @@ is not a developer: plain words, ask before product-behaviour decisions.
 Signups (review, edit, approve, reject) · Set up subdomain (Vercel) · Send setup email ·
 Club status (deactivate / reactivate / delete after 12 months) · New Client (by hand) ·
 Sports list · Restricted words · Logs · Manage users (staff) · Packages & prices ·
-Manage accounts (searchable club list) · dashboard alerts. Roles: SUPER_ADMIN, ADMIN,
+Manage accounts (searchable club list) · dashboard alerts · each club's Stripe billing status
+(plan, cancelling, payment failed) — written by the club app's `/api/billing/sync` into the
+`club_billing` table, read-only here. Roles: SUPER_ADMIN, ADMIN,
 MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in `roles.test.ts`).
 
 ## Rules that must not be broken
