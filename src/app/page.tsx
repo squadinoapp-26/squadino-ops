@@ -21,13 +21,20 @@ const VERSION_BADGE: Record<string, string> = {
 export default async function OpsDashboard() {
   const staff = await requirePlatformSessionOrRedirect();
 
-  const [clubs, liveStatus, pendingSignups] = await Promise.all([
+  const [clubs, liveStatus, pendingSignups, newestPending] = await Promise.all([
     prisma.club.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { users: true } } },
     }),
     getLiveStatus(),
     prisma.signupRequest.count({ where: { status: "PENDING" } }),
+    // The people waiting longest are shown first, so nobody is left waiting.
+    prisma.signupRequest.findMany({
+      where: { status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+      take: 5,
+      select: { id: true, clubName: true, packageKey: true, contactName: true, createdAt: true },
+    }),
   ]);
 
   // Approved clubs whose {slug}.squadino.com isn't live yet: the to-do list after approving a signup, oldest first.
@@ -85,6 +92,36 @@ export default async function OpsDashboard() {
 
       <LiveStatusProvider initial={liveStatus}>
         <div className="max-w-6xl mx-auto p-6 space-y-8">
+          <div className={`rounded-2xl border p-5 ${pendingSignups > 0 ? "bg-amber-950/40 border-amber-700" : "bg-slate-800 border-slate-700"}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-semibold">{pendingSignups > 0 ? `${pendingSignups} new signup${pendingSignups === 1 ? "" : "s"} waiting for review` : "No signups waiting"}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {pendingSignups > 0 ? "Check the payment, pick the club’s web address and approve, so they can get started." : "New signups from the website appear here as soon as they come in."}
+                </p>
+              </div>
+              <Link href="/signups" className="bg-amber-600 hover:bg-amber-500 text-sm font-semibold px-4 py-2 rounded-xl transition-colors whitespace-nowrap">
+                {pendingSignups > 0 ? "Review signups →" : "Signups →"}
+              </Link>
+            </div>
+            {newestPending.length > 0 && (
+              <ul className="mt-4 divide-y divide-amber-900/60">
+                {newestPending.map(s => (
+                  <li key={s.id}>
+                    <Link href={`/signups/${s.id}`} className="flex items-center justify-between gap-4 py-2.5 hover:text-white">
+                      <span className="min-w-0">
+                        <span className="text-sm font-medium">{s.clubName}</span>
+                        <span className="ml-2 text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono uppercase">{s.packageKey}</span>
+                        <span className="block text-xs text-slate-400 truncate">{s.contactName}</span>
+                      </span>
+                      <span className="text-xs text-slate-400 whitespace-nowrap">{new Date(s.createdAt).toLocaleDateString("en-AU")}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="grid grid-cols-4 gap-4">
             <StatCard label="Total Clubs" value={totals.clubs} />
             <StatCard label="Active Clubs" value={totals.active} />
