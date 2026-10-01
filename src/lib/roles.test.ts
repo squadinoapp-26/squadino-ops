@@ -1,15 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { canReviewSignups, canManageSportsList, canEditSignups, canViewLogs, canManageClubStatus, canManageRestrictedWords, canManageStaff } from "./auth";
+import { canApproveChanges, canManagePackages, canReviewSignups, canManageSportsList, canEditSignups, canViewLogs, canManageClubStatus, canManageRestrictedWords, canManageStaff } from "./auth";
 
 describe("canReviewSignups", () => {
-  it("lets super admins, admins and moderators approve and set clubs up", () => {
+  it("lets everyone who can sign in approve signups and set clubs up (everyday work)", () => {
     expect(canReviewSignups("SUPER_ADMIN")).toBe(true);
     expect(canReviewSignups("ADMIN")).toBe(true);
     expect(canReviewSignups("MODERATOR")).toBe(true);
-  });
-
-  it("keeps customer care to viewing only", () => {
-    expect(canReviewSignups("CUSTOMER_CARE")).toBe(false);
+    expect(canReviewSignups("CUSTOMER_CARE")).toBe(true);
   });
 
   it("refuses when nobody is signed in", () => {
@@ -73,5 +70,21 @@ describe("canManageStaff", () => {
     expect(canManageStaff("SUPER_ADMIN")).toBe(true);
     expect(canManageStaff("ADMIN")).toBe(false);
     expect(canManageStaff("CUSTOMER_CARE")).toBe(false);
+  });
+});
+
+describe("canApproveChanges / canManagePackages", () => {
+  it("lets only super admins and admins make or approve plan, billing and package changes", () => {
+    for (const fn of [canApproveChanges, canManagePackages]) {
+      expect(fn("SUPER_ADMIN")).toBe(true);
+      expect(fn("ADMIN")).toBe(true);
+      expect(fn("MODERATOR")).toBe(false);
+      expect(fn("CUSTOMER_CARE")).toBe(false);
+    }
+  });
+
+  it("refuses when nobody is signed in", () => {
+    expect(canApproveChanges(null)).toBe(false);
+    expect(canApproveChanges(undefined)).toBe(false);
   });
 });

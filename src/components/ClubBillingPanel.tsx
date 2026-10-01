@@ -7,6 +7,7 @@ export interface ClubBillingInfo {
   packageKey: string | null;
   interval: string | null;
   lastEventAt: Date;
+  holdEndsAt: Date | null;
 }
 
 const STATUS: Record<string, { label: string; tone: string }> = {
@@ -26,6 +27,8 @@ export default function ClubBillingPanel({ billing }: { billing: ClubBillingInfo
   const plan = billing.packageKey
     ? `${billing.packageKey.charAt(0).toUpperCase()}${billing.packageKey.slice(1)}${billing.interval ? ` · ${billing.interval}` : ""}`
     : "—";
+  const onHold = billing.packageKey === "hold";
+  const holdEnds = billing.holdEndsAt ? melbourneDate.format(billing.holdEndsAt) : null;
   const periodEnd = billing.currentPeriodEnd ? melbourneDate.format(billing.currentPeriodEnd) : null;
 
   return (
@@ -44,6 +47,11 @@ export default function ClubBillingPanel({ billing }: { billing: ClubBillingInfo
           <dd className="mt-0.5">{periodEnd ?? "—"}</dd>
         </div>
       </dl>
+      {onHold && (
+        <p className="rounded-xl bg-blue-950 text-blue-300 px-3 py-2 text-sm">
+          On account hold: the club is switched off at the lower hold price{holdEnds ? ` and returns to its old plan automatically on ${holdEnds}` : ""}.
+        </p>
+      )}
       {billing.cancelAtPeriodEnd && (
         <p className="rounded-xl bg-amber-950 text-amber-300 px-3 py-2 text-sm">
           The customer has cancelled{periodEnd ? `. The club is switched off automatically on ${periodEnd}.` : "."}

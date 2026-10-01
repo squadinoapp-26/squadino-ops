@@ -17,6 +17,15 @@ export const AUDIT_ACTIONS = {
   "sport.remove": "Removed sport",
   "word.add": "Added restricted word",
   "word.remove": "Removed restricted word",
+  "request.create": "Asked for a change",
+  "request.approve": "Approved a change request",
+  "request.reject": "Rejected a change request",
+  "package.edit": "Edited package",
+  "billing.action": "Billing change (Stripe)",
+  "billing.hold_started": "Account hold started (Stripe)",
+  "billing.hold_ended": "Account hold ended (Stripe)",
+  "billing.hold_reminder": "Hold ending reminder sent",
+  "billing.hold_resume_requested": "Hold ended: plan restored in Stripe",
   "billing.plan_change": "Plan changed (Stripe)",
   "billing.cancel_scheduled": "Cancellation scheduled (Stripe)",
   "billing.cancel_undone": "Cancellation undone (Stripe)",
@@ -29,7 +38,7 @@ export const AUDIT_ACTIONS = {
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;
-export type AuditTargetType = "signup" | "club" | "sport" | "word" | "staff";
+export type AuditTargetType = "signup" | "club" | "sport" | "word" | "staff" | "package" | "request";
 
 export type AuditValue = string | number | boolean | string[] | null;
 

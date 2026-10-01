@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges } from "@/lib/auth";
 import AppConfigMenu from "@/components/AppConfigMenu";
+import { countPendingChanges } from "@/lib/changeRequests.server";
 import { canDeleteClub } from "@/lib/clubStatus";
 import { isMissingTable } from "@/lib/prismaErrors";
 import { getDeactivationDates } from "@/lib/clubStatus.server";
@@ -22,6 +23,7 @@ const VERSION_BADGE: Record<string, string> = {
 export default async function OpsDashboard() {
   const staff = await requirePlatformSessionOrRedirect();
 
+  const pendingChanges = await countPendingChanges();
   const [clubs, liveStatus, pendingSignups, newestPending] = await Promise.all([
     prisma.club.findMany({
       orderBy: { createdAt: "desc" },
@@ -92,7 +94,8 @@ export default async function OpsDashboard() {
             ...(canManageRestrictedWords(staff.role) ? [{ href: "/restricted-words", label: "Restricted words", desc: "Words blocked or held for review in every club" }] : []),
             ...(canViewLogs(staff.role) ? [{ href: "/logs", label: "Logs", desc: "Every change made in this portal" }] : []),
             ...(canManageStaff(staff.role) ? [{ href: "/app-management/staff", label: "Manage users", desc: "Who can sign in to this portal" }] : []),
-            ...(canManagePackages(staff.role) ? [{ href: "/app-management/packages", label: "Packages", desc: "Plans, prices and user limits" }] : []),
+            { href: "/approvals", label: "Approvals", desc: "Changes waiting for an admin to approve" },
+            { href: "/app-management/packages", label: "Packages", desc: canManagePackages(staff.role) ? "Plans, prices and user limits" : "See plans, or ask for a price change" },
             { href: "/clubs", label: "Manage accounts", desc: "Every club account, with search" },
           ]} />
           <div className="text-right">
@@ -141,6 +144,16 @@ export default async function OpsDashboard() {
             <StatCard label="Total Users" value={totals.users} />
             <StatCard label="Logged In Now" value={<OnlineNowValue />} live />
           </div>
+
+          {canApproveChanges(staff.role) && pendingChanges > 0 && (
+            <div className="rounded-2xl border border-blue-700 bg-blue-950/40 p-5 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-semibold">{`${pendingChanges} change${pendingChanges === 1 ? "" : "s"} waiting for your approval`}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Plan, billing and package changes asked for by the team.</p>
+              </div>
+              <Link href="/approvals" className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-xl transition-colors whitespace-nowrap">Review →</Link>
+            </div>
+          )}
 
           {billingAttention.length > 0 && (
             <div className="bg-slate-800 border border-amber-800/60 rounded-2xl p-5">

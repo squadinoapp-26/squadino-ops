@@ -15,14 +15,16 @@ function dollars(cents: number) { return (cents / 100).toFixed(2); }
 // here — always derived from the monthly price so the two can't drift.
 function yearlyCents(monthlyCents: number) { return Math.round(monthlyCents * 12 * 0.95); }
 
-export default function PackagesManager({ initial }: { initial: PackageRow[] }) {
+export default function PackagesManager({ initial, needsApproval = false }: { initial: PackageRow[]; needsApproval?: boolean }) {
   const [packages, setPackages] = useState(initial);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function save(pkg: PackageRow) {
     setSavingId(pkg.id);
     setError("");
+    setNotice("");
     const res = await fetch(`/api/packages/${pkg.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -32,6 +34,7 @@ export default function PackagesManager({ initial }: { initial: PackageRow[] }) 
       }),
     });
     if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? "Failed to save"); }
+    else if (res.status === 202) setNotice(`Your change to ${pkg.name} was sent to an admin for approval. It takes effect once they approve it.`);
     setSavingId(null);
   }
 
@@ -51,6 +54,12 @@ export default function PackagesManager({ initial }: { initial: PackageRow[] }) 
 
   return (
     <div className="space-y-6">
+      {needsApproval && (
+        <p className="rounded-xl bg-amber-950 text-amber-300 px-4 py-3 text-sm">
+          Package prices and limits need an admin&apos;s approval. Press Save to send your change to an admin; nothing changes until they approve it.
+        </p>
+      )}
+      {notice && <p className="rounded-xl bg-green-950 text-green-300 px-4 py-3 text-sm">{notice}</p>}
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <div className="space-y-3">
         {packages.map(pkg => (
@@ -97,13 +106,13 @@ export default function PackagesManager({ initial }: { initial: PackageRow[] }) 
                 Active (selectable for new/existing clients)
               </label>
               <div className="flex items-center gap-2">
-                {pkg.clubCount === 0 && (
+                {pkg.clubCount === 0 && !needsApproval && (
                   <button onClick={() => remove(pkg)} disabled={savingId === pkg.id}
                     className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5">Delete</button>
                 )}
                 <button onClick={() => save(pkg)} disabled={savingId === pkg.id}
                   className="text-xs font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 text-white px-4 py-1.5 rounded-lg">
-                  {savingId === pkg.id ? "Saving…" : "Save"}
+                  {savingId === pkg.id ? "Saving…" : needsApproval ? "Request change" : "Save"}
                 </button>
               </div>
             </div>
@@ -111,8 +120,8 @@ export default function PackagesManager({ initial }: { initial: PackageRow[] }) 
         ))}
       </div>
 
-      <NewPackageForm nextSortOrder={packages.length ? Math.max(...packages.map(p => p.sortOrder)) + 1 : 0}
-        onCreated={(pkg) => setPackages(prev => [...prev, { ...pkg, clubCount: 0 }])} />
+      {!needsApproval && <NewPackageForm nextSortOrder={packages.length ? Math.max(...packages.map(p => p.sortOrder)) + 1 : 0}
+        onCreated={(pkg) => setPackages(prev => [...prev, { ...pkg, clubCount: 0 }])} />}
     </div>
   );
 }

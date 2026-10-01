@@ -680,8 +680,42 @@ model ClubBilling {
   lastEvent         String?
   lastEventAt       DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+  // Account hold: the club is switched off at a lower price for up to 3 months, then goes back
+  // to the plan it was on (holdFromPriceId is that plan's Stripe price).
+  holdStartedAt      DateTime?
+  holdEndsAt         DateTime?
+  holdFromPriceId    String?
+  holdReminderSentAt DateTime?
 
   @@map("club_billing")
+}
+
+// A change that needs an admin's sign-off (plan or user limits, account hold / resume / cancel,
+// package prices). Super admins and admins make these directly; moderators and customer care
+// ask here and an admin approves or rejects. Managed in the ops app (/approvals). No club
+// relation on purpose: the request is a record that outlives the club.
+model ChangeRequest {
+  id              String    @id @default(cuid())
+  // PLAN_CHANGE | HOLD_START | HOLD_RESUME | SUBSCRIPTION_CANCEL | PACKAGE_EDIT
+  type            String
+  clubId          String?
+  // The club or package this is about, for display.
+  targetLabel     String
+  payload         Json
+  reason          String?
+  // PENDING | APPROVED | REJECTED | FAILED (approved but the change could not be applied)
+  status          String    @default("PENDING")
+  requestedById   String?
+  requestedByName String
+  requestedByRole String
+  createdAt       DateTime  @default(now())
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  decisionNote    String?
+
+  @@index([status, createdAt])
+  @@map("change_requests")
 }
 
 // One row per change made in the platform console (/platform): editing or

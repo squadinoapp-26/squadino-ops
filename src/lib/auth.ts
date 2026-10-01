@@ -85,8 +85,15 @@ export function canManageClients(role: string) {
   return ["SUPER_ADMIN", "ADMIN"].includes(role);
 }
 
+// Package prices and limits are sensitive: super admins and admins change them directly, everyone
+// else sends a request for an admin to approve.
 export function canManagePackages(role: string) {
-  return role === "SUPER_ADMIN";
+  return ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
+// Approving or rejecting change requests, and making plan/billing changes directly.
+export function canApproveChanges(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
 }
 
 export function canManageStaff(role: string) {
@@ -110,10 +117,9 @@ export async function getPlatformUser() {
   return getPlatformSession();
 }
 
-// Signups, subdomains and setup emails: Super Admin, Admin and Moderator. Customer
-// Care can look but not act.
+// Signups, subdomains and setup emails are everyday work: anyone who can sign in to the console.
 export function canReviewSignups(role: string | null | undefined) {
-  return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR"].includes(role);
+  return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR", "CUSTOMER_CARE"].includes(role);
 }
 
 // Correcting a pending signup's details, and reading the change Logs.
