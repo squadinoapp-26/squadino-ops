@@ -12,15 +12,18 @@ export interface PlanPackage {
 }
 
 export default function ClubPlanEditor({
-  clubId, packages, currentPackageId, userCapOverride, userCount,
+  clubId, packages, currentPackageId, userCapOverride, userCount, needsApproval = false,
 }: {
   clubId: string;
   packages: PlanPackage[];
   currentPackageId: string | null;
   userCapOverride: number | null;
   userCount: number;
+  // Moderators and customer care ask; an admin approves.
+  needsApproval?: boolean;
 }) {
   const router = useRouter();
+  const [notice, setNotice] = useState("");
   const [packageId, setPackageId] = useState(currentPackageId ?? "");
   const [savingPackage, setSavingPackage] = useState(false);
   const [packageError, setPackageError] = useState("");
@@ -40,6 +43,7 @@ export default function ClubPlanEditor({
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error ?? "Failed to save");
+    if (res.status === 202) setNotice("Your request was sent to an admin for approval. The plan changes once they approve it.");
     router.refresh();
   }
 
@@ -90,6 +94,12 @@ export default function ClubPlanEditor({
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-6">
       <h2 className="font-semibold text-slate-200">Plan &amp; User Limit</h2>
+      {needsApproval && (
+        <p className="rounded-xl bg-amber-950 text-amber-300 px-3 py-2 text-sm">
+          Plan and user-limit changes need an admin&apos;s approval. Saving sends a request; nothing changes until an admin approves it.
+        </p>
+      )}
+      {notice && <p className="rounded-xl bg-green-950 text-green-300 px-3 py-2 text-sm">{notice}</p>}
 
       <div>
         <label htmlFor="club-package" className="block text-sm font-medium text-slate-300 mb-1">Package</label>
@@ -106,7 +116,7 @@ export default function ClubPlanEditor({
           </select>
           <button type="button" onClick={savePackage} disabled={savingPackage || packageId === (currentPackageId ?? "")}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl whitespace-nowrap">
-            {savingPackage ? "Saving…" : "Save"}
+            {savingPackage ? "Sending…" : needsApproval ? "Request" : "Save"}
           </button>
         </div>
         {packageError && <p className="text-red-400 text-sm mt-1.5">{packageError}</p>}
@@ -127,7 +137,7 @@ export default function ClubPlanEditor({
             className="flex-1 bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <button type="button" onClick={saveOverride} disabled={savingOverride}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl whitespace-nowrap">
-            {savingOverride ? "Saving…" : "Save"}
+            {savingOverride ? "Sending…" : needsApproval ? "Request" : "Save"}
           </button>
           {userCapOverride != null && (
             <button type="button" onClick={clearOverride} disabled={savingOverride}

@@ -242,6 +242,7 @@ model Club {
   safeguardingRequests SafeguardingRequest[]
   faceProfiles         FaceProfile[]
   deactivation         ClubDeactivation?
+  billing              ClubBilling?
   eventTypes           ClubEventType[]
   bookingSettings      BookingSettings?
   bookableSessions     BookableSession[]
@@ -612,7 +613,7 @@ enum SignupRequestStatus {
 // before any Club/User is created. Payment (if any) has already happened
 // by the time this row exists — see Website/src/app/api/checkout/route.ts
 // and .../api/webhooks/stripe/route.ts — but provisioning now waits for a
-// platform admin to approve it from /platform/signups, rather than
+// platform admin to approve it from ops.squadino.com/signups, rather than
 // happening automatically. Fields beyond what Club/User store (registered
 // legal name, requested custom URL, contact phone, estimated user count)
 // are kept here for admin/support reference and are not duplicated onto
@@ -662,10 +663,65 @@ model ClubDeactivation {
   @@map("club_deactivations")
 }
 
+// What Stripe last told us about a club's subscription (plan, status, whether it is set to
+// cancel), kept up to date by POST /api/billing/sync, which the marketing site's Stripe webhook
+// calls. Shown on the club page in the ops app. Kept out of the clubs table on purpose: a new
+// column there would break every club query if the code deployed before `db-sync.cmd` ran.
+model ClubBilling {
+  clubId            String    @id
+  club              Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  // Stripe's subscription status: trialing, active, past_due, unpaid, canceled, ...
+  status            String
+  cancelAtPeriodEnd Boolean   @default(false)
+  // When the paid period ends (or the scheduled cancellation takes effect).
+  currentPeriodEnd  DateTime?
+  packageKey        String?
+  interval          String?
+  lastEvent         String?
+  lastEventAt       DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  // Account hold: the club is switched off at a lower price for up to 3 months, then goes back
+  // to the plan it was on (holdFromPriceId is that plan's Stripe price).
+  holdStartedAt      DateTime?
+  holdEndsAt         DateTime?
+  holdFromPriceId    String?
+  holdReminderSentAt DateTime?
+
+  @@map("club_billing")
+}
+
+// A change that needs an admin's sign-off (plan or user limits, account hold / resume / cancel,
+// package prices). Super admins and admins make these directly; moderators and customer care
+// ask here and an admin approves or rejects. Managed in the ops app (/approvals). No club
+// relation on purpose: the request is a record that outlives the club.
+model ChangeRequest {
+  id              String    @id @default(cuid())
+  // PLAN_CHANGE | HOLD_START | HOLD_RESUME | SUBSCRIPTION_CANCEL | PACKAGE_EDIT
+  type            String
+  clubId          String?
+  // The club or package this is about, for display.
+  targetLabel     String
+  payload         Json
+  reason          String?
+  // PENDING | APPROVED | REJECTED | FAILED (approved but the change could not be applied)
+  status          String    @default("PENDING")
+  requestedById   String?
+  requestedByName String
+  requestedByRole String
+  createdAt       DateTime  @default(now())
+  decidedById     String?
+  decidedByName   String?
+  decidedAt       DateTime?
+  decisionNote    String?
+
+  @@index([status, createdAt])
+  @@map("change_requests")
+}
+
 // One row per change made in the platform console (/platform): editing or
 // reviewing a signup, creating/editing/deleting a club, setting a subdomain
 // up, sending a setup email, changing the sports list. Shown read-only at
-// /platform/logs to super admins and admins. Rows are only ever inserted —
+// ops.squadino.com/logs to super admins and admins. Rows are only ever inserted —
 // nothing in the app updates or deletes them (see src/lib/auditLog.server.ts).
 model PlatformAuditLog {
   id          String   @id @default(cuid())
@@ -694,7 +750,7 @@ model PlatformAuditLog {
 
 // The platform-wide list of sports every sport picker offers — website
 // signup, the get-started wizard, club App Settings and the platform club
-// editor. Platform super admins and admins add to it at /platform/sports.
+// editor. Platform super admins and admins add to it at ops.squadino.com/sports.
 // Clubs store sport *names* (Club.sport / Club.sports), not references to
 // rows here, so removing a sport never changes a club that already has it.
 // Filled with a default list on first read (see src/lib/sportCatalog.ts).
@@ -1516,7 +1572,7 @@ model BannedWord {
 }
 
 // The restricted-words list every club gets, managed by platform super
-// admins and admins at /platform/restricted-words. Each club adds its own
+// admins and admins at ops.squadino.com/restricted-words. Each club adds its own
 // on top (BannedWord). Filled with DEFAULT_BANNED_WORDS on first read (see
 // src/lib/moderation.ts); if the table can't be read, that list is used.
 model PlatformBannedWord {

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requirePlatformSession, canManageClients, canManagePackages } from "@/lib/auth";
 import { isValidSlug } from "@/lib/clubProvisioning";
-import { canManageClubStatus, getPlatformUser } from "@/lib/auth";
+import { canManageClubStatus, getPlatformUser, canApproveChanges } from "@/lib/auth";
+import { submitChange, ChangeError } from "@/lib/changeRequests.server";
+import { cleanReason, parsePlanChange } from "@/lib/changeRequests";
 import { diffFields } from "@/lib/auditLog";
 import { recordAudit } from "@/lib/auditLog.server";
 import { canDeleteClub, deletableFrom } from "@/lib/clubStatus";
@@ -17,16 +19,33 @@ import { ROOT_DOMAIN } from "@/lib/hostClub";
 // fields actually get used to route a request.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const staff = await requirePlatformSession().catch(() => null);
-  if (!staff || !canManageClients(staff.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!staff) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+
+  // A plan or user-limit change is sensitive: anyone can ask, but only an admin makes it. A request
+  // goes to the Approvals list for an admin to approve.
+  if (("packageId" in body || "userCapOverride" in body) && !canApproveChanges(staff.role)) {
+    const parsed = parsePlanChange(body);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    try {
+      const result = await submitChange({ type: "PLAN_CHANGE", clubId: id, payload: parsed.payload, reason: cleanReason(body.reason) }, staff);
+      return NextResponse.json(result, { status: "requested" in result ? 202 : 200 });
+    } catch (e) {
+      if (e instanceof ChangeError) return NextResponse.json({ error: e.message }, { status: e.status });
+      throw e;
+    }
+  }
+
+  if (!canManageClients(staff.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const club = await prisma.club.findUnique({
     where: { id },
     select: { id: true, name: true, slug: true, subdomainReady: true, customDomain: true, packageId: true, userCapOverride: true },
   });
   if (!club) return NextResponse.json({ error: "Club not found" }, { status: 404 });
 
-  const body = await req.json().catch(() => ({}));
   const data: {
     packageId?: string | null; userCapOverride?: number | null;
     slug?: string; subdomainReady?: boolean; customDomain?: string | null;

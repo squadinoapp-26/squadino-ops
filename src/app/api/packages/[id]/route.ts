@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSession, canManagePackages } from "@/lib/auth";
+import { requirePlatformSession, canManagePackages, canApproveChanges } from "@/lib/auth";
+import { submitChange, ChangeError } from "@/lib/changeRequests.server";
+import { cleanReason, parsePackageEdit } from "@/lib/changeRequests";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const staff = await requirePlatformSession().catch(() => null);
-  if (!staff || !canManagePackages(staff.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!staff) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const { name, userCap, priceCents, trialDays, active } = await req.json().catch(() => ({}));
+  const raw = await req.json().catch(() => ({}));
+
+  // Package prices and limits are sensitive: anyone can ask for a change, only an admin makes it.
+  if (!canApproveChanges(staff.role)) {
+    const parsed = parsePackageEdit(id, raw);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    try {
+      const result = await submitChange({ type: "PACKAGE_EDIT", clubId: null, payload: parsed.payload, reason: cleanReason(raw.reason), targetLabel: parsed.payload.name }, staff);
+      return NextResponse.json(result, { status: 202 });
+    } catch (e) {
+      if (e instanceof ChangeError) return NextResponse.json({ error: e.message }, { status: e.status });
+      throw e;
+    }
+  }
+
+  const { name, userCap, priceCents, trialDays, active } = raw;
   if (typeof name !== "string" || !name.trim()) return NextResponse.json({ error: "Name is required" }, { status: 400 });
   if (userCap !== null && (typeof userCap !== "number" || userCap < 1)) {
     return NextResponse.json({ error: "User cap must be a positive number, or blank for unlimited" }, { status: 400 });

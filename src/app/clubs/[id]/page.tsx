@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, canManagePackages, canReviewSignups, canManageClubStatus } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, canManagePackages, canReviewSignups, canManageClubStatus, canApproveChanges } from "@/lib/auth";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
 import { vercelDomainsConfigured } from "@/lib/vercelDomains";
 import ClubSetupPanel from "./ClubSetupPanel";
 import ClubStatusPanel from "./ClubStatusPanel";
+import BillingActionsPanel from "./BillingActionsPanel";
+import ClubBillingPanel from "@/components/ClubBillingPanel";
+import { isMissingTable } from "@/lib/prismaErrors";
 import { canDeleteClub, deletableFrom, monthsBetween } from "@/lib/clubStatus";
 import { getDeactivationDates, isClubNeverUsed } from "@/lib/clubStatus.server";
 import { presenceFor } from "@/lib/presence";
@@ -50,6 +53,11 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   });
   const deactivatedAt = (await getDeactivationDates([club]))?.get(club.id) ?? null;
   const neverUsed = await isClubNeverUsed(club.id);
+  // What Stripe last said about the subscription; the table may not exist yet (database update not run).
+  const billing = await prisma.clubBilling.findUnique({ where: { clubId: club.id } }).catch((e) => {
+    if (isMissingTable(e)) return null;
+    throw e;
+  });
   const needsSetup = club.active && (!club.subdomainReady || pendingOwners.length > 0);
 
   return (
@@ -89,6 +97,18 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
           />
         )}
 
+        <ClubBillingPanel billing={billing} />
+
+        {club.stripeSubscriptionId && !club.stripeSubscriptionId.startsWith("dummy_") && (
+          <BillingActionsPanel
+            clubId={club.id}
+            clubName={club.name}
+            onHold={billing?.packageKey === "hold"}
+            cancelling={!!billing?.cancelAtPeriodEnd}
+            needsApproval={!canApproveChanges(staff.role)}
+          />
+        )}
+
         <ClubStatusPanel
           clubId={club.id}
           clubName={club.name}
@@ -114,25 +134,14 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
           initialCustomDomain={club.customDomain}
         />
 
-        {canManagePackages(staff.role) ? (
-          <ClubPlanEditor
-            clubId={club.id}
-            packages={packages.map((p) => ({ id: p.id, name: p.name, userCap: p.userCap, priceCents: p.priceCents, active: p.active }))}
-            currentPackageId={club.packageId}
-            userCapOverride={club.userCapOverride}
-            userCount={club._count.users}
-          />
-        ) : (
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 flex items-center justify-between text-sm">
-            <span className="text-slate-400">
-              Plan: {packages.find((p) => p.id === club.packageId)?.name ?? "No package"}
-            </span>
-            <span className="font-semibold text-slate-200">
-              {club._count.users} / {club.userCapOverride ?? packages.find((p) => p.id === club.packageId)?.userCap ?? "unlimited"} users
-              {club.userCapOverride != null && <span className="text-blue-400 font-normal"> (override)</span>}
-            </span>
-          </div>
-        )}
+        <ClubPlanEditor
+          clubId={club.id}
+          packages={packages.map((p) => ({ id: p.id, name: p.name, userCap: p.userCap, priceCents: p.priceCents, active: p.active }))}
+          currentPackageId={club.packageId}
+          userCapOverride={club.userCapOverride}
+          userCount={club._count.users}
+          needsApproval={!canManagePackages(staff.role)}
+        />
 
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h2 className="font-semibold mb-4 text-slate-200">Recent Users</h2>
