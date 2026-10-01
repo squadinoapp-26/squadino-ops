@@ -36,8 +36,14 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    `Website/src/lib/packages.ts` — `signupPackages.test.ts` has the expected values written
    out; change both together), `hostClub.ts`, `subdomain.ts`, `sportCatalog.ts`,
    `restrictedWordsList.ts`.
-5. Staff passwords are at least 12 characters (`src/lib/passwordPolicy.ts`).
-6. Keep the console out of search engines and frames (headers in `next.config.ts`,
+5. **Sensitive changes need an admin.** Plan / user-limit changes, billing actions (account hold,
+   resume, cancel) and package prices go through `submitChange` in
+   `src/lib/changeRequests.server.ts`: SUPER_ADMIN and ADMIN make them directly, everyone else creates
+   a `ChangeRequest` that an admin approves at `/approvals` (`decideChange`). Never write to the
+   club's plan, user cap or a package, or call the club app's billing API, from a route without
+   going through it. Role helpers: `canApproveChanges`, `canManagePackages` (`src/lib/auth.ts`).
+6. Staff passwords are at least 12 characters (`src/lib/passwordPolicy.ts`).
+7. Keep the console out of search engines and frames (headers in `next.config.ts`,
    `src/app/robots.ts`, `robots` in the layout).
 
 ## Commands (Cylance blocks `npx` and `gh.exe` on the owner's PC — call node directly)
@@ -55,7 +61,8 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
 `DATABASE_URL` · `SQUADINO_APP_URL` (default https://app.squadino.com; setup-email links) ·
 `RESEND_API_KEY` · `VERCEL_API_TOKEN` · `VERCEL_PROJECT_ID` (**the club app's project**, not
 ops — club addresses belong to it) · `VERCEL_TEAM_ID` (if a team) · `ROOT_DOMAIN` (default
-squadino.com).
+squadino.com) · `PROVISIONING_SECRET` (same value as the club app's; ops uses it to ask the club app to
+start/resume a hold or cancel a subscription).
 
 ## Still to do
 
