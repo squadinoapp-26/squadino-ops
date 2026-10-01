@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus } from "@/lib/auth";
 import AppConfigMenu from "@/components/AppConfigMenu";
 import { canDeleteClub } from "@/lib/clubStatus";
+import { isMissingTable } from "@/lib/prismaErrors";
 import { getDeactivationDates } from "@/lib/clubStatus.server";
 import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
@@ -36,6 +37,18 @@ export default async function OpsDashboard() {
       select: { id: true, clubName: true, packageKey: true, contactName: true, createdAt: true },
     }),
   ]);
+
+  // Clubs whose Stripe subscription is cancelling or failing to pay, soonest first.
+  const billingAttention = await prisma.clubBilling
+    .findMany({
+      where: { OR: [{ status: { in: ["past_due", "unpaid"] } }, { cancelAtPeriodEnd: true }], club: { active: true } },
+      orderBy: { currentPeriodEnd: "asc" },
+      select: { clubId: true, status: true, cancelAtPeriodEnd: true, currentPeriodEnd: true, club: { select: { name: true } } },
+    })
+    .catch((e) => {
+      if (isMissingTable(e)) return [];
+      throw e;
+    });
 
   // Approved clubs whose {slug}.squadino.com isn't live yet: the to-do list after approving a signup, oldest first.
   const awaitingSubdomain = clubs.filter(c => c.active && !c.subdomainReady).reverse();
@@ -128,6 +141,32 @@ export default async function OpsDashboard() {
             <StatCard label="Total Users" value={totals.users} />
             <StatCard label="Logged In Now" value={<OnlineNowValue />} live />
           </div>
+
+          {billingAttention.length > 0 && (
+            <div className="bg-slate-800 border border-amber-800/60 rounded-2xl p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">Billing needs attention</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Customers who have cancelled in Stripe or whose payment is failing. Cancelled clubs switch off automatically when their paid period ends.</p>
+                </div>
+                <span className="text-sm font-bold px-3 py-1 rounded-full bg-amber-900 text-amber-300">{billingAttention.length}</span>
+              </div>
+              <ul className="mt-4 divide-y divide-slate-700">
+                {billingAttention.map(b => (
+                  <li key={b.clubId} className="flex items-center justify-between gap-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{b.club.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {b.status === "past_due" || b.status === "unpaid" ? "Payment failed" : "Cancelled, ends"}
+                        {b.currentPeriodEnd && b.cancelAtPeriodEnd ? ` ${melbourneDate.format(b.currentPeriodEnd)}` : ""}
+                      </p>
+                    </div>
+                    <Link href={`/clubs/${b.clubId}`} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">Open →</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {awaitingSubdomain.length > 0 && (
             <div className="bg-slate-800 border border-amber-800/60 rounded-2xl p-5">

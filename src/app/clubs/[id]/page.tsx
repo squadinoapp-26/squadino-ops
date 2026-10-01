@@ -4,6 +4,8 @@ import { ROOT_DOMAIN } from "@/lib/hostClub";
 import { vercelDomainsConfigured } from "@/lib/vercelDomains";
 import ClubSetupPanel from "./ClubSetupPanel";
 import ClubStatusPanel from "./ClubStatusPanel";
+import ClubBillingPanel from "@/components/ClubBillingPanel";
+import { isMissingTable } from "@/lib/prismaErrors";
 import { canDeleteClub, deletableFrom, monthsBetween } from "@/lib/clubStatus";
 import { getDeactivationDates, isClubNeverUsed } from "@/lib/clubStatus.server";
 import { presenceFor } from "@/lib/presence";
@@ -50,6 +52,11 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   });
   const deactivatedAt = (await getDeactivationDates([club]))?.get(club.id) ?? null;
   const neverUsed = await isClubNeverUsed(club.id);
+  // What Stripe last said about the subscription; the table may not exist yet (database update not run).
+  const billing = await prisma.clubBilling.findUnique({ where: { clubId: club.id } }).catch((e) => {
+    if (isMissingTable(e)) return null;
+    throw e;
+  });
   const needsSetup = club.active && (!club.subdomainReady || pendingOwners.length > 0);
 
   return (
@@ -88,6 +95,8 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
             autoSubdomain={vercelDomainsConfigured()}
           />
         )}
+
+        <ClubBillingPanel billing={billing} />
 
         <ClubStatusPanel
           clubId={club.id}
