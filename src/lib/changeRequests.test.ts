@@ -66,7 +66,7 @@ describe("describeChange", () => {
     expect(describeChange("PLAN_CHANGE", { packageId: "p1", userCapOverride: 80 }, { p1: "Growth" })).toBe("package: Growth; user limit: 80");
     expect(describeChange("PLAN_CHANGE", { userCapOverride: null })).toBe("remove the user-limit override");
     expect(describeChange("PACKAGE_EDIT", { name: "Growth", priceCents: 11900, userCap: 400, active: true })).toBe("Growth: $119.00/mo, 400 users");
-    expect(describeChange("HOLD_START", {})).toContain("lower hold price");
+    expect(describeChange("HOLD_START", {})).toContain("$50/month");
     expect(describeChange("SUBSCRIPTION_CANCEL", {})).toContain("end of the period");
   });
 });

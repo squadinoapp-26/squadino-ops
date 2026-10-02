@@ -105,9 +105,9 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
     case "PACKAGE_EDIT":
       return `${p.name ?? "Package"}: ${typeof p.priceCents === "number" ? money(p.priceCents) : "?"}/mo, ${p.userCap ? `${p.userCap} users` : "unlimited users"}${p.active === false ? ", inactive" : ""}`;
     case "HOLD_START":
-      return "Switch the club off at the lower hold price for up to 3 months, then back to its plan";
+      return "Move to the $50/month hold price for up to 3 months with fewer features (no Wall, Chat, Training or Stats, no new members), then back to its plan";
     case "HOLD_RESUME":
-      return "Switch the club back on and return it to the plan it was on";
+      return "End the hold now: back to the plan and price it was on, with all features";
     case "SUBSCRIPTION_CANCEL":
       return "Cancel the subscription at the end of the period already paid for";
   }

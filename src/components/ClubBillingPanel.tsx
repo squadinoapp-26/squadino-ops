@@ -49,7 +49,7 @@ export default function ClubBillingPanel({ billing }: { billing: ClubBillingInfo
       </dl>
       {onHold && (
         <p className="rounded-xl bg-blue-950 text-blue-300 px-3 py-2 text-sm">
-          On account hold: the club is switched off at the lower hold price{holdEnds ? ` and returns to its old plan automatically on ${holdEnds}` : ""}.
+          On account hold ($50/month): Wall, Chat, Training and Stats are off and no new members can be added{holdEnds ? `. The full plan returns automatically on ${holdEnds}` : ""}.
         </p>
       )}
       {billing.cancelAtPeriodEnd && (

@@ -7,17 +7,17 @@ type Action = "start_hold" | "resume" | "cancel";
 const COPY: Record<Action, { label: string; confirm: string; tone: string }> = {
   start_hold: {
     label: "Put on account hold",
-    confirm: "Put this club on hold? It is switched off for everyone and moves to the lower hold price for up to 3 months, then returns to its old plan automatically.",
+    confirm: "Put this club on hold? It moves to the $50/month hold price for up to 3 months, from the next invoice. Wall, Chat, Training and Stats are switched off and no new members can be added; everything else keeps working and no data is touched. After 3 months it returns to its old plan automatically.",
     tone: "bg-blue-600 hover:bg-blue-700",
   },
   resume: {
-    label: "Resume from hold",
-    confirm: "Resume this club now? It goes back to its old plan and price, and is switched back on.",
+    label: "End hold (back to full plan)",
+    confirm: "End the hold now? The club goes back to its old plan and price, with all its features, from the next invoice.",
     tone: "bg-green-600 hover:bg-green-700",
   },
   cancel: {
     label: "Cancel subscription",
-    confirm: "Cancel this subscription? It ends at the end of the period already paid for, then the club is switched off (its data is kept for 12 months).",
+    confirm: "Cancel this subscription? It ends at the end of the period already paid for, then the club is deactivated. Nothing is deleted: its data is kept (a club can only be deleted by an admin, and only 12 months after it was deactivated).",
     tone: "bg-red-700 hover:bg-red-600",
   },
 };

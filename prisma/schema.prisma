@@ -686,6 +686,8 @@ model ClubBilling {
   holdEndsAt         DateTime?
   holdFromPriceId    String?
   holdReminderSentAt DateTime?
+  // The club's modules before the hold, restored when it ends.
+  holdPreviousModules Json?
 
   @@map("club_billing")
 }
