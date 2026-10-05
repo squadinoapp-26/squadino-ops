@@ -114,6 +114,8 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
             onHold={billing?.packageKey === "hold"}
             cancelling={!!billing?.cancelAtPeriodEnd}
             needsApproval={!canApproveChanges(staff.role)}
+            canExtend={billing?.packageKey === "hold" && !!billing.holdEndsAt && billing.holdEndsAt > new Date() && !billing.holdExtendedAt}
+            holdEndsOn={billing?.holdEndsAt ? melbourneDate.format(billing.holdEndsAt) : null}
             offers={offers.map((o) => ({
               id: o.id,
               kind: o.kind,

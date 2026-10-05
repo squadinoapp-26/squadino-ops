@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Action = "offer_hold" | "resume" | "cancel";
+type Action = "offer_hold" | "offer_extension" | "resume" | "cancel";
 
 const COPY: Record<Action, { label: string; confirm: string; tone: string; done: string }> = {
   offer_hold: {
@@ -10,6 +10,12 @@ const COPY: Record<Action, { label: string; confirm: string; tone: string; done:
     confirm: "Email the customer an offer to put their club on hold? It is $50/month for up to 3 months, with Wall, Chat, Training and Stats off and no new members; yearly customers are credited for the unused part of their year. NOTHING changes unless the customer says yes on the link in the email.",
     tone: "bg-blue-600 hover:bg-blue-700",
     done: "The offer was emailed to the club's admins. Nothing changes until they accept it.",
+  },
+  offer_extension: {
+    label: "Offer a longer hold",
+    confirm: "Email the customer an offer to extend their hold at the same $50/month. This is for a loyal customer, and only once per hold. NOTHING changes unless the customer says yes on the link in the email. It must be sent before the hold ends: once a hold runs out the subscription is over.",
+    tone: "bg-indigo-600 hover:bg-indigo-700",
+    done: "The extension offer was emailed to the club's admins. Nothing changes until they accept it.",
   },
   resume: {
     label: "End hold (back to full plan)",
@@ -37,7 +43,7 @@ export interface OfferInfo {
 // admin approves on the Approvals page. A hold is never started for the customer: it is an emailed offer
 // that only their "yes" turns into a hold.
 export default function BillingActionsPanel({
-  clubId, clubName, onHold, cancelling, needsApproval, offers,
+  clubId, clubName, onHold, cancelling, needsApproval, offers, canExtend, holdEndsOn,
 }: {
   clubId: string;
   clubName: string;
@@ -45,7 +51,11 @@ export default function BillingActionsPanel({
   cancelling: boolean;
   needsApproval: boolean;
   offers: OfferInfo[];
+  // On hold, still running, and not extended yet.
+  canExtend: boolean;
+  holdEndsOn: string | null;
 }) {
+  const [months, setMonths] = useState<1 | 2>(1);
   const router = useRouter();
   const [busy, setBusy] = useState<Action | null>(null);
   const [reason, setReason] = useState("");
@@ -59,7 +69,7 @@ export default function BillingActionsPanel({
     const res = await fetch(`/api/clubs/${clubId}/billing-action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, reason }),
+      body: JSON.stringify({ action, reason, ...(action === "offer_extension" ? { months } : {}) }),
     });
     const data = await res.json().catch(() => ({}));
     setBusy(null);
@@ -75,7 +85,7 @@ export default function BillingActionsPanel({
     router.refresh();
   }
 
-  const actions: Action[] = onHold ? ["resume", "cancel"] : cancelling ? ["offer_hold"] : ["offer_hold", "cancel"];
+  const actions: Action[] = onHold ? [...(canExtend ? ["offer_extension" as const] : []), "resume", "cancel"] : cancelling ? ["offer_hold"] : ["offer_hold", "cancel"];
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-4">
@@ -90,6 +100,23 @@ export default function BillingActionsPanel({
       <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500}
         placeholder="Reason (optional, kept in the Logs)"
         className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      {onHold && (
+        <p className="text-xs text-slate-400">
+          {holdEndsOn ? `The hold ends on ${holdEndsOn}. ` : ""}
+          If the customer doesn&apos;t choose before then, their subscription ends and the club is switched off (nothing is deleted).
+          {canExtend ? " A loyal customer can be offered 1 or 2 more months at $50, once." : ""}
+        </p>
+      )}
+      {actions.includes("offer_extension") && (
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          Extension length
+          <select value={months} onChange={(e) => setMonths(e.target.value === "2" ? 2 : 1)}
+            className="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-1.5 text-sm">
+            <option value={1}>1 month</option>
+            <option value={2}>2 months</option>
+          </select>
+        </label>
+      )}
       <div className="flex flex-wrap gap-3">
         {actions.map((a) => (
           <button key={a} type="button" onClick={() => run(a)} disabled={busy !== null}
@@ -106,7 +133,7 @@ export default function BillingActionsPanel({
           <ul className="space-y-1.5">
             {offers.map((o) => (
               <li key={o.id} className="text-sm text-slate-300">
-                <span className="text-slate-400">{o.kind === "START" ? "Hold offer" : "End-of-hold choice"} · {o.sentOn}</span>
+                <span className="text-slate-400">{o.kind === "START" ? "Hold offer" : o.kind === "EXTEND" ? "Extension offer" : "End-of-hold choice"} · {o.sentOn}</span>
                 {" — "}{o.label}
               </li>
             ))}

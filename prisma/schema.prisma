@@ -689,6 +689,8 @@ model ClubBilling {
   holdReminderSentAt DateTime?
   // The club's modules before the hold, restored when it ends.
   holdPreviousModules Json?
+  // Set when staff's extension offer was accepted: a hold can be extended once.
+  holdExtendedAt      DateTime?
 
   @@map("club_billing")
 }
@@ -711,6 +713,8 @@ model HoldOffer {
   respondedAt DateTime?
   createdBy   String?
   sentTo      String[]
+  // EXTEND offers: how many months are on offer (1 or 2).
+  months      Int?
 
   @@index([clubId, createdAt])
   @@map("hold_offers")

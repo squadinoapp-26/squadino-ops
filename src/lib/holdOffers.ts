@@ -3,7 +3,8 @@
 // Pure, so the rules are unit-tested without a database.
 
 // START: "would you like to put your club on hold?"  END: "your hold is ending: what next?"
-export type OfferKind = "START" | "END";
+// EXTEND: "as a thank you, would you like 1-2 more months at the same price?" (sent by staff)
+export type OfferKind = "START" | "END" | "EXTEND";
 export type OfferChoice = "accept" | "decline" | "continue" | "end";
 
 export const OFFER_VALID_DAYS = 14;
@@ -11,6 +12,7 @@ export const OFFER_VALID_DAYS = 14;
 export const OFFER_CHOICES: Record<OfferKind, OfferChoice[]> = {
   START: ["accept", "decline"],
   END: ["continue", "end"],
+  EXTEND: ["accept", "decline"],
 };
 
 export function isValidChoice(kind: OfferKind, choice: unknown): choice is OfferChoice {
@@ -18,7 +20,7 @@ export function isValidChoice(kind: OfferKind, choice: unknown): choice is Offer
 }
 
 export function isOfferKind(value: unknown): value is OfferKind {
-  return value === "START" || value === "END";
+  return value === "START" || value === "END" || value === "EXTEND";
 }
 
 /** When an offer sent at `now` stops working. */
@@ -36,12 +38,13 @@ export function offerState(offer: { status: string; expiresAt: Date }, now: Date
 }
 
 /** Short words for an offer's progress, for staff in the ops app. */
-export function offerStatusLabel(offer: { status: string; choice: string | null; expiresAt: Date }, now: Date): string {
+export function offerStatusLabel(offer: { status: string; choice: string | null; expiresAt: Date; kind?: string }, now: Date): string {
+  const kind = offer.kind;
   const state = offerState(offer, now);
   if (state === "open") return "Waiting for the customer";
   if (state === "expired") return "Expired without an answer";
   if (state === "cancelled") return "Replaced by a newer offer";
-  if (offer.choice === "accept") return "Customer accepted: on hold";
+  if (offer.choice === "accept") return kind === "EXTEND" ? "Customer accepted: hold extended" : "Customer accepted: on hold";
   if (offer.choice === "decline") return "Customer declined";
   if (offer.choice === "continue") return "Customer chose to continue on their plan";
   if (offer.choice === "end") return "Customer chose to end the subscription";
