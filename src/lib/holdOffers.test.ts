@@ -15,6 +15,9 @@ describe("isValidChoice / isOfferKind", () => {
     expect(isValidChoice("END", "accept")).toBe(false);
     expect(isValidChoice("END", 5)).toBe(false);
     expect(isOfferKind("START")).toBe(true);
+    expect(isOfferKind("EXTEND")).toBe(true);
+    expect(isValidChoice("EXTEND", "accept")).toBe(true);
+    expect(isValidChoice("EXTEND", "continue")).toBe(false);
     expect(isOfferKind("OTHER")).toBe(false);
   });
 });
@@ -41,6 +44,7 @@ describe("offerStatusLabel", () => {
     expect(offerStatusLabel({ status: "PENDING", choice: null, expiresAt: earlier }, now)).toBe("Expired without an answer");
     expect(offerStatusLabel({ status: "ACCEPTED", choice: "accept", expiresAt: later }, now)).toBe("Customer accepted: on hold");
     expect(offerStatusLabel({ status: "DECLINED", choice: "decline", expiresAt: later }, now)).toBe("Customer declined");
+    expect(offerStatusLabel({ status: "ACCEPTED", choice: "accept", expiresAt: later, kind: "EXTEND" }, now)).toBe("Customer accepted: hold extended");
     expect(offerStatusLabel({ status: "ACCEPTED", choice: "end", expiresAt: later }, now)).toBe("Customer chose to end the subscription");
   });
 });

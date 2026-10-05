@@ -96,7 +96,8 @@ export async function executeChange(
       const club = await prisma.club.findUnique({ where: { id: clubId }, select: { name: true } });
       if (!club) throw new ChangeError("Club not found", 404);
       try {
-        await runClubBillingAction(clubId, action, actor.name);
+        const months = (payload as { months?: number } | null)?.months;
+        await runClubBillingAction(clubId, action, actor.name, { months });
       } catch (e) {
         throw new ChangeError(e instanceof Error ? e.message : "Stripe couldn't make that change", 502);
       }

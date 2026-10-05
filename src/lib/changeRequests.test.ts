@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  billingActionFor, cleanReason, describeChange, isChangeType, parsePackageEdit, parsePlanChange, REASON_MAX,
+  billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, REASON_MAX,
 } from "./changeRequests";
 
 describe("isChangeType / billingActionFor", () => {
@@ -8,6 +8,7 @@ describe("isChangeType / billingActionFor", () => {
     expect(isChangeType("HOLD_START")).toBe(true);
     expect(isChangeType("DROP_TABLE")).toBe(false);
     expect(billingActionFor("HOLD_START")).toBe("offer_hold");
+    expect(billingActionFor("HOLD_EXTEND")).toBe("offer_extension");
     expect(billingActionFor("HOLD_RESUME")).toBe("resume");
     expect(billingActionFor("SUBSCRIPTION_CANCEL")).toBe("cancel");
     expect(billingActionFor("PLAN_CHANGE")).toBeNull();
@@ -68,5 +69,21 @@ describe("describeChange", () => {
     expect(describeChange("PACKAGE_EDIT", { name: "Growth", priceCents: 11900, userCap: 400, active: true })).toBe("Growth: $119.00/mo, 400 users");
     expect(describeChange("HOLD_START", {})).toContain("offer");
     expect(describeChange("SUBSCRIPTION_CANCEL", {})).toContain("end of the period");
+  });
+});
+
+describe("parseExtension", () => {
+  it("accepts only 1 or 2 months", () => {
+    expect(parseExtension({ months: 1 })).toEqual({ ok: true, payload: { months: 1 } });
+    expect(parseExtension({ months: 2 })).toEqual({ ok: true, payload: { months: 2 } });
+    expect(parseExtension({ months: 3 }).ok).toBe(false);
+    expect(parseExtension({ months: "2" }).ok).toBe(false);
+    expect(parseExtension({}).ok).toBe(false);
+    expect(parseExtension(null).ok).toBe(false);
+  });
+
+  it("describes the request", () => {
+    expect(describeChange("HOLD_EXTEND", { months: 2 })).toContain("2 more months");
+    expect(describeChange("HOLD_EXTEND", { months: 1 })).toContain("1 more month ");
   });
 });
