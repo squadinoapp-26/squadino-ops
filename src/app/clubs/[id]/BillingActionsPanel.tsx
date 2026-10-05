@@ -7,12 +7,12 @@ type Action = "start_hold" | "resume" | "cancel";
 const COPY: Record<Action, { label: string; confirm: string; tone: string }> = {
   start_hold: {
     label: "Put on account hold",
-    confirm: "Put this club on hold? It moves to the $50/month hold price for up to 3 months, from the next invoice. Wall, Chat, Training and Stats are switched off and no new members can be added; everything else keeps working and no data is touched. After 3 months it returns to its old plan automatically.",
+    confirm: "Put this club on hold? It moves to the $50/month hold price for up to 3 months. Monthly customers pay $50 from their next invoice; yearly customers are credited for the unused part of their year and start paying $50/month straight away, from that credit. Wall, Chat, Training and Stats are switched off and no new members can be added; everything else keeps working and no data is touched. After 3 months it returns to its old plan automatically.",
     tone: "bg-blue-600 hover:bg-blue-700",
   },
   resume: {
     label: "End hold (back to full plan)",
-    confirm: "End the hold now? The club goes back to its old plan and price, with all its features, from the next invoice.",
+    confirm: "End the hold now? The club goes back to its old plan and price, with all its features. If it was a yearly plan, Stripe starts a new year now and takes any left-over credit off the charge.",
     tone: "bg-green-600 hover:bg-green-700",
   },
   cancel: {
