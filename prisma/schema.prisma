@@ -243,6 +243,7 @@ model Club {
   faceProfiles         FaceProfile[]
   deactivation         ClubDeactivation?
   billing              ClubBilling?
+  holdOffers           HoldOffer[]
   eventTypes           ClubEventType[]
   bookingSettings      BookingSettings?
   bookableSessions     BookableSession[]
@@ -690,6 +691,29 @@ model ClubBilling {
   holdPreviousModules Json?
 
   @@map("club_billing")
+}
+
+// An offer emailed to a club's admins about an account hold. A hold is never started or ended for a
+// customer: they answer from a private link (only a fingerprint of it is stored) and nothing changes
+// until they do. START = "put the club on hold?"; END = "the hold is ending: what next?".
+model HoldOffer {
+  id          String    @id @default(cuid())
+  clubId      String
+  club        Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  kind        String
+  tokenHash   String    @unique
+  // PENDING | ACCEPTED | DECLINED | CANCELLED (replaced by a newer offer)
+  status      String    @default("PENDING")
+  // accept | decline | continue | end
+  choice      String?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+  createdBy   String?
+  sentTo      String[]
+
+  @@index([clubId, createdAt])
+  @@map("hold_offers")
 }
 
 // A change that needs an admin's sign-off (plan or user limits, account hold / resume / cancel,

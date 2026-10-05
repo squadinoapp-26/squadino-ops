@@ -4,7 +4,7 @@
 
 export const CHANGE_TYPES = {
   PLAN_CHANGE: "Change plan or user limit",
-  HOLD_START: "Put on account hold",
+  HOLD_START: "Offer account hold to the customer",
   HOLD_RESUME: "Resume from account hold",
   SUBSCRIPTION_CANCEL: "Cancel subscription",
   PACKAGE_EDIT: "Edit package price or limit",
@@ -24,8 +24,8 @@ export function cleanReason(value: unknown): string | null {
 }
 
 /** The action the club app runs for the billing request types, or null for the others. */
-export function billingActionFor(type: ChangeType): "start_hold" | "resume" | "cancel" | null {
-  if (type === "HOLD_START") return "start_hold";
+export function billingActionFor(type: ChangeType): "offer_hold" | "resume" | "cancel" | null {
+  if (type === "HOLD_START") return "offer_hold";
   if (type === "HOLD_RESUME") return "resume";
   if (type === "SUBSCRIPTION_CANCEL") return "cancel";
   return null;
@@ -105,7 +105,7 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
     case "PACKAGE_EDIT":
       return `${p.name ?? "Package"}: ${typeof p.priceCents === "number" ? money(p.priceCents) : "?"}/mo, ${p.userCap ? `${p.userCap} users` : "unlimited users"}${p.active === false ? ", inactive" : ""}`;
     case "HOLD_START":
-      return "Move to the $50/month hold price for up to 3 months with fewer features (no Wall, Chat, Training or Stats, no new members), then back to its plan";
+      return "Email the customer an offer to move to the $50/month hold price for up to 3 months with fewer features (no Wall, Chat, Training or Stats, no new members). Nothing changes unless they accept";
     case "HOLD_RESUME":
       return "End the hold now: back to the plan and price it was on, with all features";
     case "SUBSCRIPTION_CANCEL":
