@@ -5,6 +5,7 @@ import { vercelDomainsConfigured } from "@/lib/vercelDomains";
 import ClubSetupPanel from "./ClubSetupPanel";
 import ClubStatusPanel from "./ClubStatusPanel";
 import BillingActionsPanel from "./BillingActionsPanel";
+import { offerStatusLabel } from "@/lib/holdOffers";
 import ClubBillingPanel from "@/components/ClubBillingPanel";
 import { isMissingTable } from "@/lib/prismaErrors";
 import { canDeleteClub, deletableFrom, monthsBetween } from "@/lib/clubStatus";
@@ -58,6 +59,13 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
     if (isMissingTable(e)) return null;
     throw e;
   });
+  // Account hold offers sent to the customer (the table may not exist yet).
+  const offers = await prisma.holdOffer
+    .findMany({ where: { clubId: club.id }, orderBy: { createdAt: "desc" }, take: 4 })
+    .catch((e) => {
+      if (isMissingTable(e)) return [];
+      throw e;
+    });
   const needsSetup = club.active && (!club.subdomainReady || pendingOwners.length > 0);
 
   return (
@@ -106,6 +114,13 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
             onHold={billing?.packageKey === "hold"}
             cancelling={!!billing?.cancelAtPeriodEnd}
             needsApproval={!canApproveChanges(staff.role)}
+            offers={offers.map((o) => ({
+              id: o.id,
+              kind: o.kind,
+              label: offerStatusLabel(o, new Date()),
+              sentOn: melbourneDate.format(o.createdAt),
+              sentTo: o.sentTo,
+            }))}
           />
         )}
 

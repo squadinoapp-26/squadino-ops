@@ -3,7 +3,7 @@ import { requirePlatformSession } from "@/lib/auth";
 import { submitChange, ChangeError } from "@/lib/changeRequests.server";
 import { cleanReason, type ChangeType } from "@/lib/changeRequests";
 
-const TYPES: Record<string, ChangeType> = { start_hold: "HOLD_START", resume: "HOLD_RESUME", cancel: "SUBSCRIPTION_CANCEL" };
+const TYPES: Record<string, ChangeType> = { offer_hold: "HOLD_START", resume: "HOLD_RESUME", cancel: "SUBSCRIPTION_CANCEL" };
 
 // Account hold, resume and cancel. Anyone who can sign in may ask; an admin's request is carried out
 // straight away, anyone else's goes to the Approvals list (202).
