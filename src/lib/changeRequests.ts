@@ -118,7 +118,7 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
     case "PACKAGE_EDIT":
       return `${p.name ?? "Package"}: ${typeof p.priceCents === "number" ? money(p.priceCents) : "?"}/mo, ${p.userCap ? `${p.userCap} users` : "unlimited users"}${p.active === false ? ", inactive" : ""}`;
     case "HOLD_START":
-      return "Email the customer an offer to move to the $50/month hold price for up to 3 months with every feature kept but no new members. Nothing changes unless they accept";
+      return "Email the customer an offer to move to the $50/month hold price for up to 3 months with fewer features (no Wall, Chat, Training or Stats, no new members). Nothing changes unless they accept";
     case "HOLD_EXTEND":
       return `Email the customer an offer to extend their hold by ${p.months === 2 ? 2 : 1} more month${p.months === 2 ? "s" : ""} at the same $50/month. Nothing changes unless they accept`;
     case "HOLD_RESUME":

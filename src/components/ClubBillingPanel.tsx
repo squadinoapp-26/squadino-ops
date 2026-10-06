@@ -50,7 +50,7 @@ export default function ClubBillingPanel({ billing }: { billing: ClubBillingInfo
       </dl>
       {onHold && (
         <p className="rounded-xl bg-blue-950 text-blue-300 px-3 py-2 text-sm">
-          <strong className="text-blue-100">On account hold ($50/month):</strong> every feature stays on but no new members can be added
+          <strong className="text-blue-100">On account hold ($50/month):</strong> Wall, Chat, Training and Stats are off and no new members can be added
           {holdEnds && (
             <>
               . The hold ends on <strong className="text-blue-100">{holdEnds}</strong>
