@@ -7,7 +7,7 @@ type Action = "offer_hold" | "offer_extension" | "resume" | "cancel";
 const COPY: Record<Action, { label: string; confirm: string; tone: string; done: string }> = {
   offer_hold: {
     label: "Send account hold offer",
-    confirm: "Email the customer an offer to put their club on hold? It is $50/month for up to 3 months, with Wall, Chat, Training and Stats off and no new members; yearly customers are credited for the unused part of their year. NOTHING changes unless the customer says yes on the link in the email.",
+    confirm: "Email the customer an offer to put their club on hold? It is $50/month for up to 3 months, with Wall and Chat off and no new members; yearly customers are credited for the unused part of their year. NOTHING changes unless the customer says yes on the link in the email.",
     tone: "bg-blue-600 hover:bg-blue-700",
     done: "The offer was emailed to the club's admins. Nothing changes until they accept it.",
   },
