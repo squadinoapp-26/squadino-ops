@@ -9,6 +9,7 @@ import { getLiveStatus } from "@/lib/presence";
 import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } from "@/components/LiveStatus";
 import SignOutButton from "@/components/SignOutButton";
 import Link from "next/link";
+import SearchableList from "@/components/SearchableList";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,16 @@ export default async function OpsDashboard() {
       if (isMissingTable(e)) return [];
       throw e;
     });
+
+  // A club's owner is the person who registered it: the earliest admin who hasn't been removed.
+  const admins = await prisma.user.findMany({
+    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, status: { not: "REMOVED" } },
+    orderBy: { createdAt: "asc" },
+    select: { clubId: true, name: true },
+  });
+  const ownerByClub = new Map<string, string>();
+  for (const a of admins) if (!ownerByClub.has(a.clubId)) ownerByClub.set(a.clubId, a.name);
+  const searchText = (c: { id: string; name: string; slug: string }) => `${c.name} ${c.slug} ${c.slug}.squadino.com ${ownerByClub.get(c.id) ?? ""}`;
 
   // Approved clubs whose {slug}.squadino.com isn't live yet: the to-do list after approving a signup, newest first.
   const awaitingSubdomain = clubs.filter(c => c.active && !c.subdomainReady);
@@ -190,20 +201,28 @@ export default async function OpsDashboard() {
                 </div>
                 <span className="text-sm font-bold px-3 py-1 rounded-full bg-amber-900 text-amber-300">{awaitingSubdomain.length}</span>
               </div>
-              <ul className="mt-4 divide-y divide-slate-700 max-h-52 overflow-y-auto pr-2">
-                {awaitingSubdomain.map(club => (
-                  <li key={club.id} className="flex items-center justify-between gap-4 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{club.name}</p>
-                      <p className="text-xs text-slate-400 font-mono">{club.slug}.squadino.com</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs text-slate-400 whitespace-nowrap">{new Date(club.createdAt).toLocaleDateString("en-AU")}</span>
-                      <Link href={`/clubs/${club.id}`} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">Set up →</Link>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <SearchableList
+                as="ul"
+                placeholder="Search by club name, web address or owner"
+                listClassName="divide-y divide-slate-700 max-h-52 overflow-y-auto pr-2"
+                items={awaitingSubdomain.map(club => ({
+                  id: club.id,
+                  search: searchText(club),
+                  node: (
+                    <li className="flex items-center justify-between gap-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{club.name}</p>
+                        <p className="text-xs text-slate-400 font-mono">{club.slug}.squadino.com</p>
+                        {ownerByClub.get(club.id) && <p className="text-xs text-slate-500 truncate">Owner: {ownerByClub.get(club.id)}</p>}
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-slate-400 whitespace-nowrap">{new Date(club.createdAt).toLocaleDateString("en-AU")}</span>
+                        <Link href={`/clubs/${club.id}`} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">Set up →</Link>
+                      </div>
+                    </li>
+                  ),
+                }))}
+              />
             </div>
           )}
 
@@ -237,9 +256,15 @@ export default async function OpsDashboard() {
 
           <h2 className="text-lg font-bold">All Clubs</h2>
 
-          <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-2">
-            {clubs.map(club => (
-              <div key={club.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex items-center gap-4">
+          <SearchableList
+            placeholder="Search by club name, web address or owner"
+            listClassName="space-y-3 max-h-[28rem] overflow-y-auto pr-2"
+            emptyText="No clubs match your search."
+            items={clubs.map(club => ({
+              id: club.id,
+              search: searchText(club),
+              node: (
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex items-center gap-4">
                 {club.logoUrl
                   ? <img src={club.logoUrl} alt={club.name} className="w-12 h-12 rounded-xl object-cover" />
                   : <div className="w-12 h-12 rounded-xl bg-blue-700 flex items-center justify-center text-lg font-bold">{club.name.charAt(0)}</div>}
@@ -252,7 +277,7 @@ export default async function OpsDashboard() {
                     </span>
                     {!club.active && <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">Inactive</span>}
                   </div>
-                  <p className="text-sm text-slate-400">{club.sport} · {club._count.users} users · /{club.slug}</p>
+                  <p className="text-sm text-slate-400">{club.sport} · {club._count.users} users · /{club.slug}{ownerByClub.get(club.id) ? ` · Owner: ${ownerByClub.get(club.id)}` : ""}</p>
                   <div className="mt-1"><ClubOnlineBadge clubId={club.id} /></div>
                 </div>
                 <div className="text-sm text-slate-400">{new Date(club.createdAt).toLocaleDateString("en-AU")}</div>
@@ -261,7 +286,10 @@ export default async function OpsDashboard() {
                   Manage →
                 </Link>
               </div>
-            ))}
+              ),
+            }))}
+          />
+          <div className="space-y-3">
             {clubs.length === 0 && (
               <div className="text-center py-16 text-slate-500">
                 <p className="text-4xl mb-3">🏟️</p>
