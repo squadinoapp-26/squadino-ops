@@ -50,17 +50,32 @@ export default function ClubBillingPanel({ billing }: { billing: ClubBillingInfo
       </dl>
       {onHold && (
         <p className="rounded-xl bg-blue-950 text-blue-300 px-3 py-2 text-sm">
-          On account hold ($50/month): Wall, Chat, Training and Stats are off and no new members can be added{holdEnds ? `. The hold ends on ${holdEnds}${billing.holdExtendedAt ? " (extended once)" : ""}; if the customer hasn't chosen by then, the subscription ends and the club is switched off` : ""}.
+          <strong className="text-blue-100">On account hold ($50/month):</strong> Wall, Chat, Training and Stats are off and no new members can be added
+          {holdEnds && (
+            <>
+              . The hold ends on <strong className="text-blue-100">{holdEnds}</strong>
+              {billing.holdExtendedAt ? " (extended once)" : ""}; if the customer hasn&apos;t chosen by then,{" "}
+              <strong className="text-blue-100">the subscription ends and the club is switched off</strong>
+            </>
+          )}
+          .
         </p>
       )}
       {billing.cancelAtPeriodEnd && (
         <p className="rounded-xl bg-amber-950 text-amber-300 px-3 py-2 text-sm">
-          The customer has cancelled{periodEnd ? `. The club is switched off automatically on ${periodEnd}.` : "."}
+          <strong className="text-amber-100">The customer has cancelled</strong>
+          {periodEnd ? (
+            <>
+              . The club is switched off automatically on <strong className="text-amber-100">{periodEnd}</strong>.
+            </>
+          ) : (
+            "."
+          )}
         </p>
       )}
       {billing.status === "past_due" && (
         <p className="rounded-xl bg-amber-950 text-amber-300 px-3 py-2 text-sm">
-          The last payment failed. Stripe is retrying and the club admins have been emailed. If it still can&apos;t be taken, the club is switched off automatically.
+          <strong className="text-amber-100">The last payment failed.</strong> Stripe is retrying and the club admins have been emailed. If it still can&apos;t be taken, the club is switched off automatically.
         </p>
       )}
       <p className="text-xs text-slate-500">{`Last update from Stripe: ${melbourneDate.format(billing.lastEventAt)}`}</p>
