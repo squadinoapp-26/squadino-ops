@@ -237,7 +237,7 @@ export default async function OpsDashboard() {
 
           <h2 className="text-lg font-bold">All Clubs</h2>
 
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-2">
             {clubs.map(club => (
               <div key={club.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex items-center gap-4">
                 {club.logoUrl
