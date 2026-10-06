@@ -5,9 +5,12 @@
 // style as src/lib/stripe.ts.
 //
 // Needs, in this app's env:
-//   VERCEL_API_TOKEN   a Vercel access token with access to the project
-//   VERCEL_PROJECT_ID  this app's project ID (Project → Settings → General)
-//   VERCEL_TEAM_ID     the team's ID, if the project belongs to a team
+//   VERCEL_API_TOKEN         a Vercel access token with access to the project
+//   CLUB_VERCEL_PROJECT_ID   the CLUB app's project ID (Project → Settings → General).
+//                            Not called VERCEL_PROJECT_ID on purpose: Vercel fills that
+//                            name in itself with this (ops) project's own ID, which hid
+//                            the value we set and gave "Project not found".
+//   VERCEL_TEAM_ID           the team's ID, if the project belongs to a team
 //
 // And one-time DNS so every new subdomain resolves without a per-club
 // record: either squadino.com uses Vercel's nameservers, or its DNS host has
@@ -17,7 +20,7 @@
 const VERCEL_API = "https://api.vercel.com";
 
 export function vercelDomainsConfigured(): boolean {
-  return !!process.env.VERCEL_API_TOKEN && !!process.env.VERCEL_PROJECT_ID;
+  return !!process.env.VERCEL_API_TOKEN && !!process.env.CLUB_VERCEL_PROJECT_ID;
 }
 
 export type SubdomainSetupResult =
@@ -43,7 +46,9 @@ async function vercelFetch(path: string, method: "GET" | "POST" | "DELETE" = "GE
 }
 
 function apiError(step: string, r: { status: number; data: { error?: { message?: string } } }): SubdomainSetupResult {
-  return { status: "error", message: `Vercel couldn't ${step}: ${r.data?.error?.message ?? `HTTP ${r.status}`}` };
+  const id = process.env.CLUB_VERCEL_PROJECT_ID ?? "";
+  // Project IDs aren't secret; showing the start of the one in use makes a wrong value easy to spot.
+  return { status: "error", message: `Vercel couldn't ${step}: ${r.data?.error?.message ?? `HTTP ${r.status}`} (project ${id.slice(0, 8)}…)` };
 }
 
 /** Makes sure `host` is on the Vercel project, verified, and pointed at Vercel. Safe to call repeatedly. */
@@ -51,10 +56,10 @@ export async function ensureProjectDomain(host: string): Promise<SubdomainSetupR
   if (!vercelDomainsConfigured()) {
     return {
       status: "error",
-      message: "Automatic subdomain setup isn't configured (VERCEL_API_TOKEN / VERCEL_PROJECT_ID). Add the domain in Vercel by hand, then tick \"Subdomain is live\" below.",
+      message: "Automatic subdomain setup isn't configured (VERCEL_API_TOKEN / CLUB_VERCEL_PROJECT_ID). Add the domain in Vercel by hand, then tick \"Subdomain is live\" below.",
     };
   }
-  const project = encodeURIComponent(process.env.VERCEL_PROJECT_ID!);
+  const project = encodeURIComponent(process.env.CLUB_VERCEL_PROJECT_ID!);
   const domain = encodeURIComponent(host);
 
   try {
@@ -102,7 +107,7 @@ export async function ensureProjectDomain(host: string): Promise<SubdomainSetupR
  */
 export async function removeProjectDomain(host: string): Promise<"removed" | "skipped" | { error: string }> {
   if (!vercelDomainsConfigured()) return "skipped";
-  const project = encodeURIComponent(process.env.VERCEL_PROJECT_ID!);
+  const project = encodeURIComponent(process.env.CLUB_VERCEL_PROJECT_ID!);
   try {
     const res = await vercelFetch(`/v9/projects/${project}/domains/${encodeURIComponent(host)}`, "DELETE");
     if (res.ok || res.status === 404) return "removed";
