@@ -59,8 +59,9 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
 ## Environment (Vercel project `squadino-ops`)
 
 `DATABASE_URL` · `SQUADINO_APP_URL` (default https://app.squadino.com; setup-email links) ·
-`RESEND_API_KEY` · `VERCEL_API_TOKEN` · `VERCEL_PROJECT_ID` (**the club app's project**, not
-ops — club addresses belong to it) · `VERCEL_TEAM_ID` (if a team) · `ROOT_DOMAIN` (default
+`RESEND_API_KEY` · `VERCEL_API_TOKEN` · `CLUB_VERCEL_PROJECT_ID` (**the club app's project**, not
+ops — club addresses belong to it; deliberately NOT named `VERCEL_PROJECT_ID`, because Vercel fills that name
+in itself with ops' own project ID and it overrides ours) · `VERCEL_TEAM_ID` (if a team) · `ROOT_DOMAIN` (default
 squadino.com) · `PROVISIONING_SECRET` (same value as the club app's; ops uses it to ask the club app to
 start/resume a hold or cancel a subscription).
 

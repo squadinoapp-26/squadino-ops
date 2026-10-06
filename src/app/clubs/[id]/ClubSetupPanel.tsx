@@ -68,7 +68,7 @@ export default function ClubSetupPanel({
             <p className="text-xs text-slate-500 font-mono mt-0.5">{host}</p>
             {!subdomainReady && !autoSubdomain && (
               <p className="text-xs text-slate-500 mt-1">
-                One-click setup isn&apos;t configured (VERCEL_API_TOKEN / VERCEL_PROJECT_ID). Add the domain in Vercel by hand,
+                One-click setup isn&apos;t configured (VERCEL_API_TOKEN / CLUB_VERCEL_PROJECT_ID). Add the domain in Vercel by hand,
                 then tick &quot;Subdomain is live&quot; in the settings below.
               </p>
             )}
