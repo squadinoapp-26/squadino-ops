@@ -130,7 +130,7 @@ export default function BillingActionsPanel({
       {offers.length > 0 && (
         <div className="pt-3 border-t border-slate-700">
           <p className="text-xs uppercase tracking-wide text-slate-500 mb-2">Offers sent to the customer</p>
-          <ul className="space-y-1.5">
+          <ul className="space-y-1.5 max-h-44 overflow-y-auto pr-2">
             {offers.map((o) => (
               <li key={o.id} className="text-sm text-slate-300">
                 <span className="text-slate-400">{o.kind === "START" ? "Hold offer" : o.kind === "EXTEND" ? "Extension offer" : "End-of-hold choice"} · {o.sentOn}</span>

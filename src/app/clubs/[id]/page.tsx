@@ -61,7 +61,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   });
   // Account hold offers sent to the customer (the table may not exist yet).
   const offers = await prisma.holdOffer
-    .findMany({ where: { clubId: club.id }, orderBy: { createdAt: "desc" }, take: 4 })
+    .findMany({ where: { clubId: club.id }, orderBy: { createdAt: "desc" }, take: 100 })
     .catch((e) => {
       if (isMissingTable(e)) return [];
       throw e;
