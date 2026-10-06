@@ -52,8 +52,8 @@ export default async function OpsDashboard() {
       throw e;
     });
 
-  // Approved clubs whose {slug}.squadino.com isn't live yet: the to-do list after approving a signup, oldest first.
-  const awaitingSubdomain = clubs.filter(c => c.active && !c.subdomainReady).reverse();
+  // Approved clubs whose {slug}.squadino.com isn't live yet: the to-do list after approving a signup, newest first.
+  const awaitingSubdomain = clubs.filter(c => c.active && !c.subdomainReady);
   // Clubs inactive for 12+ months (or never used), offered to super admins and admins for permanent deletion.
   const deactivations = await getDeactivationDates(clubs);
   const readyToDelete = canManageClubStatus(staff.role)
@@ -190,7 +190,7 @@ export default async function OpsDashboard() {
                 </div>
                 <span className="text-sm font-bold px-3 py-1 rounded-full bg-amber-900 text-amber-300">{awaitingSubdomain.length}</span>
               </div>
-              <ul className="mt-4 divide-y divide-slate-700">
+              <ul className="mt-4 divide-y divide-slate-700 max-h-52 overflow-y-auto pr-2">
                 {awaitingSubdomain.map(club => (
                   <li key={club.id} className="flex items-center justify-between gap-4 py-2.5">
                     <div className="min-w-0">
