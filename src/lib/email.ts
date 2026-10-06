@@ -10,6 +10,8 @@
  * Resend — same provider/env vars as the main squadino app.
  */
 
+import { withDisclaimer } from "@/lib/emailDisclaimer";
+
 export interface OutgoingEmail {
   to: string;
   subject: string;
@@ -29,7 +31,8 @@ export function mailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY && !!process.env.MAIL_FROM;
 }
 
-export async function sendEmail(msg: OutgoingEmail): Promise<SendResult> {
+export async function sendEmail(original: OutgoingEmail): Promise<SendResult> {
+  const msg = withDisclaimer(original);
   if (!mailConfigured()) {
     // Development fallback: surface the message so the flow can be completed
     // without a provider. Never silently swallow it.
