@@ -344,6 +344,7 @@ model User {
   guardianOf                 Guardianship[]       @relation("GuardianUser") // children this user oversees (as the guardian)
   guardedBy                  Guardianship[]       @relation("ChildUser") // guardians linked to this user (as the child)
   teams                      Team[]               @relation("TeamMembers") // teams this athlete belongs to
+  position                   MemberPosition?
   resultsCreated             Result[]             @relation("ResultCreatedBy")
   resultScorerEntries        ResultScorer[]       @relation("ResultScorerUser") // matches this athlete scored in
   athleteResults             AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
@@ -1984,4 +1985,17 @@ model WorkoutLogEntry {
   notes        String?
 
   @@map("workout_log_entries")
+}
+
+// A member's position or role in their sport (e.g. "Goalkeeper", "Lead-out rider"), free text. Kept in its
+// own table rather than a column on users so code that reads it still works before the migration is applied.
+model MemberPosition {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clubId    String
+  position  String
+  updatedAt DateTime @updatedAt
+
+  @@index([clubId])
+  @@map("member_positions")
 }
