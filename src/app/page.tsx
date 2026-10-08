@@ -11,7 +11,9 @@ import SignOutButton from "@/components/SignOutButton";
 import Link from "next/link";
 import SearchableList from "@/components/SearchableList";
 import RejectedClubsPanel, { type WaitingRejection, type RejectedSignup } from "@/components/RejectedClubsPanel";
-import { listPendingRejections } from "@/lib/signupRejection.server";
+import PreApprovedClubsPanel, { type PreApprovedSignup } from "@/components/PreApprovedClubsPanel";
+import { listPendingSignupRequests } from "@/lib/signupReview.server";
+import { ROOT_DOMAIN } from "@/lib/hostClub";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +29,9 @@ export default async function OpsDashboard() {
   const staff = await requirePlatformSessionOrRedirect();
 
   const pendingChanges = await countPendingChanges();
-  // A signup a moderator wants rejected is waiting for an admin, so it doesn't count as a new signup any more.
-  const awaitingRejection = await listPendingRejections();
-  const awaitingIds = awaitingRejection.map((r) => r.signupId);
+  // A signup a moderator has pre-approved or wants rejected is waiting for an admin, so it doesn't count as a new signup any more.
+  const awaitingAdmin = await listPendingSignupRequests();
+  const awaitingIds = awaitingAdmin.map((r) => r.signupId);
   const [clubs, liveStatus, pendingSignups, newestPending] = await Promise.all([
     prisma.club.findMany({
       orderBy: { createdAt: "desc" },
@@ -69,7 +71,7 @@ export default async function OpsDashboard() {
   const searchText = (c: { id: string; name: string; slug: string }) => `${c.name} ${c.slug} ${c.slug}.squadino.com ${ownerByClub.get(c.id) ?? ""}`;
 
   // The "Rejected clubs" box (admins only): rejections waiting for a decision, then signups already rejected.
-  let rejectedPanel: { waiting: WaitingRejection[]; rejected: RejectedSignup[] } | null = null;
+  let rejectedPanel: { waiting: WaitingRejection[]; rejected: RejectedSignup[]; preApproved: PreApprovedSignup[] } | null = null;
   if (canApproveChanges(staff.role)) {
     const [waitingSignups, rejectedSignups] = await Promise.all([
       prisma.signupRequest.findMany({ where: { id: { in: awaitingIds } }, select: { id: true, clubName: true, packageKey: true, contactName: true } }),
@@ -82,9 +84,15 @@ export default async function OpsDashboard() {
     ]);
     const waitingById = new Map(waitingSignups.map((s) => [s.id, s]));
     rejectedPanel = {
-      waiting: awaitingRejection.flatMap((r) => {
+      waiting: awaitingAdmin.flatMap((r) => {
         const s = waitingById.get(r.signupId);
-        return s ? [{ requestId: r.requestId, signupId: s.id, clubName: s.clubName, packageKey: s.packageKey, contactName: s.contactName, reason: r.reason, requestedByName: r.requestedByName, createdAt: r.createdAt }] : [];
+        return s && r.kind === "REJECT" ? [{ requestId: r.requestId, signupId: s.id, clubName: s.clubName, packageKey: s.packageKey, contactName: s.contactName, reason: r.text ?? "", requestedByName: r.requestedByName, createdAt: r.createdAt }] : [];
+      }),
+      preApproved: awaitingAdmin.flatMap((r) => {
+        const s = waitingById.get(r.signupId);
+        return s && r.kind === "PREAPPROVE"
+          ? [{ signupId: s.id, clubName: s.clubName, packageKey: s.packageKey, contactName: s.contactName, slug: r.slug, paymentChecked: r.paymentChecked, notes: r.text, preApprovedByName: r.requestedByName, preApprovedByRole: r.requestedByRole, createdAt: r.createdAt }]
+          : [];
       }),
       rejected: rejectedSignups.map((s) => ({
         signupId: s.id, clubName: s.clubName, packageKey: s.packageKey, contactName: s.contactName,
@@ -194,6 +202,10 @@ export default async function OpsDashboard() {
               </div>
               <Link href="/approvals" className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-xl transition-colors whitespace-nowrap">Review →</Link>
             </div>
+          )}
+
+          {rejectedPanel && rejectedPanel.preApproved.length > 0 && (
+            <PreApprovedClubsPanel items={rejectedPanel.preApproved} rootDomain={ROOT_DOMAIN} />
           )}
 
           {rejectedPanel && (rejectedPanel.waiting.length > 0 || rejectedPanel.rejected.length > 0) && (

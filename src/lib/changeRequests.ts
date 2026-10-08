@@ -10,6 +10,7 @@ export const CHANGE_TYPES = {
   SUBSCRIPTION_CANCEL: "Cancel subscription",
   PACKAGE_EDIT: "Edit package price or limit",
   SIGNUP_REJECT: "Reject a new signup",
+  SIGNUP_PREAPPROVE: "Pre-approve a new signup",
 } as const;
 
 export type ChangeType = keyof typeof CHANGE_TYPES;
@@ -57,7 +58,33 @@ export interface SignupRejectPayload {
   reason: string;
 }
 
+export interface SignupPreApprovePayload {
+  signupId: string;
+  // The club's web address as the pre-approver picked it; the admin can change it when they approve.
+  slug?: string;
+  paymentChecked: boolean;
+  notes: string | null;
+}
+
+// Both signup requests are decided by an admin, who always gives a written reason, approving or not.
+export function decisionNoteRequired(type: string): boolean {
+  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE";
+}
+
 type Parsed<T> = { ok: true; payload: T } | { ok: false; error: string };
+
+/**
+ * A moderator or customer care officer pre-approves a signup: they have checked it (and, for a paid plan, its
+ * payment in Stripe) and may leave notes for the admin, who makes the final approval.
+ */
+export function parseSignupPreApprove(signupId: string, body: unknown, opts: { needsPaymentCheck: boolean }): Parsed<SignupPreApprovePayload> {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  if (opts.needsPaymentCheck && b.paymentChecked !== true) {
+    return { ok: false, error: "Confirm you've checked this signup's payment first." };
+  }
+  const slug = typeof b.slug === "string" && b.slug.trim() ? b.slug.trim() : undefined;
+  return { ok: true, payload: { signupId, ...(slug ? { slug } : {}), paymentChecked: b.paymentChecked === true, notes: cleanReason(b.notes) } };
+}
 
 /** Rejecting a signup always needs a written reason, so an admin can judge it. */
 export function parseSignupReject(signupId: string, reasonInput: unknown): Parsed<SignupRejectPayload> {
@@ -140,6 +167,8 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       return "Cancel the subscription at the end of the period already paid for";
     case "SIGNUP_REJECT":
       return "Reject this new signup. Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review";
+    case "SIGNUP_PREAPPROVE":
+      return `Create the club for this new signup${typeof p.slug === "string" && p.slug ? ` at ${p.slug}.squadino.com` : ""}. Approve it and the club is created; send it back and the signup returns to the signups waiting for review`;
   }
 }
 
@@ -155,6 +184,10 @@ export function requestStatusLabel(type: string, status: string): string {
   if (type === "SIGNUP_REJECT") {
     if (status === "APPROVED") return "Rejection approved";
     if (status === "REJECTED") return "Signup re-instated";
+  }
+  if (type === "SIGNUP_PREAPPROVE") {
+    if (status === "APPROVED") return "Approved: club created";
+    if (status === "REJECTED") return "Sent back for review";
   }
   return REQUEST_STATUS_LABELS[status] ?? status;
 }

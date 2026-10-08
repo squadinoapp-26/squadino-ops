@@ -1,15 +1,15 @@
 import { requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { listPendingRejections } from "@/lib/signupRejection.server";
+import { listPendingSignupRequests } from "@/lib/signupReview.server";
 
 export const dynamic = "force-dynamic";
 
 export default async function PendingSignupsPage() {
   await requirePlatformSessionOrRedirect();
-  // Signups a moderator wants rejected are waiting for an admin, so they leave the "new" list and sit in their own.
-  const awaitingRejection = await listPendingRejections();
-  const awaitingIds = awaitingRejection.map((r) => r.signupId);
+  // Signups a moderator has pre-approved or wants rejected are waiting for an admin, so they leave the "new" list and sit in their own.
+  const awaitingAdmin = await listPendingSignupRequests();
+  const awaitingIds = awaitingAdmin.map((r) => r.signupId);
   const [signups, recent, waiting, rejected] = await Promise.all([
     prisma.signupRequest.findMany({
       where: { status: "PENDING", id: { notIn: awaitingIds } },
@@ -68,26 +68,29 @@ export default async function PendingSignupsPage() {
           </div>
         )}
 
-        {awaitingRejection.length > 0 && (
+        {awaitingAdmin.length > 0 && (
           <div className="pt-6">
-            <h2 className="font-bold mb-1">Rejection waiting for an admin</h2>
-            <p className="text-xs text-slate-500 mb-3">A moderator has asked for these to be rejected. An admin approves the rejection or re-instates the signup.</p>
+            <h2 className="font-bold mb-1">Waiting for an admin</h2>
+            <p className="text-xs text-slate-500 mb-3">A moderator or customer care officer has pre-approved these, or asked for them to be rejected. An admin makes the final decision.</p>
             <div className="space-y-2">
-              {awaitingRejection.map((r) => {
+              {awaitingAdmin.map((r) => {
                 const s = waitingById.get(r.signupId);
                 if (!s) return null;
                 return (
                   <Link
                     key={r.requestId}
                     href={`/signups/${s.id}`}
-                    className="block bg-slate-800/60 border border-red-900/60 rounded-xl px-4 py-3 hover:border-slate-500 transition-colors"
+                    className={`block bg-slate-800/60 border rounded-xl px-4 py-3 hover:border-slate-500 transition-colors ${r.kind === "REJECT" ? "border-red-900/60" : "border-green-900/60"}`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">{s.clubName}</span>
                       <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono uppercase">{s.packageKey}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${r.kind === "REJECT" ? "bg-red-900 text-red-300" : "bg-green-900 text-green-300"}`}>
+                        {r.kind === "REJECT" ? "Rejection asked for" : "Pre-approved"}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">{`Reason: ${r.reason}`}</p>
-                    <p className="text-xs text-slate-500">{`Asked by ${r.requestedByName} · ${new Date(r.createdAt).toLocaleDateString("en-AU")}`}</p>
+                    <p className="text-xs text-slate-400 mt-1">{r.kind === "REJECT" ? `Reason: ${r.text ?? "—"}` : `Notes: ${r.text ?? "none"}`}</p>
+                    <p className="text-xs text-slate-500">{`${r.kind === "REJECT" ? "Asked by" : "Pre-approved by"} ${r.requestedByName} · ${new Date(r.createdAt).toLocaleDateString("en-AU")}`}</p>
                   </Link>
                 );
               })}

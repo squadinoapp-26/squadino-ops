@@ -48,7 +48,7 @@ export default async function ApprovalsPage() {
       </div>
       <div className="max-w-3xl mx-auto p-6 space-y-8">
         <p className="text-sm text-slate-400">
-          Changes to plans, user limits, billing and package prices need an admin, and so does rejecting a new signup. Moderators
+          Changes to plans, user limits, billing and package prices need an admin, and so does the final approval or rejection of a new signup (always with a written reason). Moderators
           and customer care ask here; an admin approves (the change is made straight away) or rejects.
         </p>
 
@@ -71,7 +71,7 @@ export default async function ApprovalsPage() {
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_TONE.PENDING}`}>{REQUEST_STATUS_LABELS.PENDING}</span>
               </div>
               <p className="text-xs text-slate-500 mt-2">{`Asked by ${r.requestedByName} · ${when.format(r.createdAt)}`}</p>
-              {r.reason && <p className="text-sm text-slate-300 mt-2">{`Reason: ${r.reason}`}</p>}
+              {r.reason && <p className="text-sm text-slate-300 mt-2">{`${r.type === "SIGNUP_PREAPPROVE" ? "Notes" : "Reason"}: ${r.reason}`}</p>}
               {canDecide ? <ApprovalActions id={r.id} type={r.type} /> :<p className="text-xs text-slate-500 mt-3">An admin will review this.</p>}
             </div>
           ))}
