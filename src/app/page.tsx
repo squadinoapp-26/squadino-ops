@@ -10,6 +10,8 @@ import { LiveStatusProvider, OnlineNowValue, BusiestClients, ClubOnlineBadge } f
 import SignOutButton from "@/components/SignOutButton";
 import Link from "next/link";
 import SearchableList from "@/components/SearchableList";
+import RejectedClubsPanel, { type WaitingRejection, type RejectedSignup } from "@/components/RejectedClubsPanel";
+import { listPendingRejections } from "@/lib/signupRejection.server";
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +27,19 @@ export default async function OpsDashboard() {
   const staff = await requirePlatformSessionOrRedirect();
 
   const pendingChanges = await countPendingChanges();
+  // A signup a moderator wants rejected is waiting for an admin, so it doesn't count as a new signup any more.
+  const awaitingRejection = await listPendingRejections();
+  const awaitingIds = awaitingRejection.map((r) => r.signupId);
   const [clubs, liveStatus, pendingSignups, newestPending] = await Promise.all([
     prisma.club.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { users: true } } },
     }),
     getLiveStatus(),
-    prisma.signupRequest.count({ where: { status: "PENDING" } }),
+    prisma.signupRequest.count({ where: { status: "PENDING", id: { notIn: awaitingIds } } }),
     // The people waiting longest are shown first, so nobody is left waiting.
     prisma.signupRequest.findMany({
-      where: { status: "PENDING" },
+      where: { status: "PENDING", id: { notIn: awaitingIds } },
       orderBy: { createdAt: "asc" },
       take: 5,
       select: { id: true, clubName: true, packageKey: true, contactName: true, createdAt: true },
@@ -62,6 +67,31 @@ export default async function OpsDashboard() {
   const ownerByClub = new Map<string, string>();
   for (const a of admins) if (!ownerByClub.has(a.clubId)) ownerByClub.set(a.clubId, a.name);
   const searchText = (c: { id: string; name: string; slug: string }) => `${c.name} ${c.slug} ${c.slug}.squadino.com ${ownerByClub.get(c.id) ?? ""}`;
+
+  // The "Rejected clubs" box (admins only): rejections waiting for a decision, then signups already rejected.
+  let rejectedPanel: { waiting: WaitingRejection[]; rejected: RejectedSignup[] } | null = null;
+  if (canApproveChanges(staff.role)) {
+    const [waitingSignups, rejectedSignups] = await Promise.all([
+      prisma.signupRequest.findMany({ where: { id: { in: awaitingIds } }, select: { id: true, clubName: true, packageKey: true, contactName: true } }),
+      prisma.signupRequest.findMany({
+        where: { status: "REJECTED" },
+        orderBy: { reviewedAt: "desc" },
+        take: 20,
+        include: { reviewedByPlatformUser: { select: { name: true } } },
+      }),
+    ]);
+    const waitingById = new Map(waitingSignups.map((s) => [s.id, s]));
+    rejectedPanel = {
+      waiting: awaitingRejection.flatMap((r) => {
+        const s = waitingById.get(r.signupId);
+        return s ? [{ requestId: r.requestId, signupId: s.id, clubName: s.clubName, packageKey: s.packageKey, contactName: s.contactName, reason: r.reason, requestedByName: r.requestedByName, createdAt: r.createdAt }] : [];
+      }),
+      rejected: rejectedSignups.map((s) => ({
+        signupId: s.id, clubName: s.clubName, packageKey: s.packageKey, contactName: s.contactName,
+        reason: s.rejectionReason, rejectedByName: s.reviewedByPlatformUser?.name ?? null, rejectedAt: s.reviewedAt,
+      })),
+    };
+  }
 
   // Approved clubs whose {slug}.squadino.com isn't live yet: the to-do list after approving a signup, newest first.
   const awaitingSubdomain = clubs.filter(c => c.active && !c.subdomainReady);
@@ -164,6 +194,10 @@ export default async function OpsDashboard() {
               </div>
               <Link href="/approvals" className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-xl transition-colors whitespace-nowrap">Review →</Link>
             </div>
+          )}
+
+          {rejectedPanel && (rejectedPanel.waiting.length > 0 || rejectedPanel.rejected.length > 0) && (
+            <RejectedClubsPanel waiting={rejectedPanel.waiting} rejected={rejectedPanel.rejected} />
           )}
 
           {billingAttention.length > 0 && (

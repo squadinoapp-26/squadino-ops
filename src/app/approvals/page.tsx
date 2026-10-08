@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePlatformSessionOrRedirect, canApproveChanges } from "@/lib/auth";
 import { isMissingTable } from "@/lib/prismaErrors";
-import { CHANGE_TYPES, REQUEST_STATUS_LABELS, describeChange, isChangeType } from "@/lib/changeRequests";
+import { CHANGE_TYPES, REQUEST_STATUS_LABELS, describeChange, isChangeType, requestStatusLabel } from "@/lib/changeRequests";
 import ApprovalActions from "./ApprovalActions";
 
 export const dynamic = "force-dynamic";
@@ -48,8 +48,8 @@ export default async function ApprovalsPage() {
       </div>
       <div className="max-w-3xl mx-auto p-6 space-y-8">
         <p className="text-sm text-slate-400">
-          Changes to plans, user limits, billing and package prices need an admin. Moderators and customer care ask here;
-          an admin approves (the change is made straight away) or rejects.
+          Changes to plans, user limits, billing and package prices need an admin, and so does rejecting a new signup. Moderators
+          and customer care ask here; an admin approves (the change is made straight away) or rejects.
         </p>
 
         {missingTable && (
@@ -72,7 +72,7 @@ export default async function ApprovalsPage() {
               </div>
               <p className="text-xs text-slate-500 mt-2">{`Asked by ${r.requestedByName} · ${when.format(r.createdAt)}`}</p>
               {r.reason && <p className="text-sm text-slate-300 mt-2">{`Reason: ${r.reason}`}</p>}
-              {canDecide ? <ApprovalActions id={r.id} /> : <p className="text-xs text-slate-500 mt-3">An admin will review this.</p>}
+              {canDecide ? <ApprovalActions id={r.id} type={r.type} /> :<p className="text-xs text-slate-500 mt-3">An admin will review this.</p>}
             </div>
           ))}
         </section>
@@ -84,7 +84,7 @@ export default async function ApprovalsPage() {
             <div key={r.id} className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-medium">{label(r.type)}: {r.targetLabel}</p>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_TONE[r.status] ?? STATUS_TONE.REJECTED}`}>{REQUEST_STATUS_LABELS[r.status] ?? r.status}</span>
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_TONE[r.status] ?? STATUS_TONE.REJECTED}`}>{requestStatusLabel(r.type, r.status)}</span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
                 {`Asked by ${r.requestedByName}${r.decidedByName ? ` · decided by ${r.decidedByName}` : ""}${r.decidedAt ? ` · ${when.format(r.decidedAt)}` : ""}`}

@@ -6,7 +6,7 @@ import { recordAudit } from "@/lib/auditLog.server";
 import { isMissingTable } from "@/lib/prismaErrors";
 import { runClubBillingAction } from "@/lib/clubBillingApi.server";
 import {
-  CHANGE_TYPES, billingActionFor, type ChangeType, type PackageEditPayload, type PlanChangePayload,
+  CHANGE_TYPES, billingActionFor, type ChangeType, type PackageEditPayload, type PlanChangePayload, type SignupRejectPayload,
 } from "@/lib/changeRequests";
 
 type Actor = { id: string; name: string; role: string };
@@ -85,6 +85,27 @@ export async function executeChange(
           { key: "active", label: "Active" },
         ]),
         note: withNote(null),
+      });
+      return;
+    }
+
+    case "SIGNUP_REJECT": {
+      const p = payload as SignupRejectPayload;
+      const signup = await prisma.signupRequest.findUnique({ where: { id: p.signupId }, select: { id: true, clubName: true } });
+      if (!signup) throw new ChangeError("Signup not found", 404);
+      // Only a signup nobody has reviewed yet can be rejected; the status in the filter stops two people
+      // (or a request and an approval) from deciding the same signup at once.
+      const done = await prisma.signupRequest.updateMany({
+        where: { id: signup.id, status: "PENDING" },
+        data: { status: "REJECTED", reviewedAt: new Date(), reviewedByPlatformUserId: actor.id, rejectionReason: p.reason },
+      });
+      if (done.count === 0) throw new ChangeError("This signup has already been reviewed.", 409);
+      await recordAudit(actor, {
+        action: "signup.reject",
+        targetType: "signup",
+        targetId: signup.id,
+        targetLabel: signup.clubName,
+        note: withNote(null) ?? `Reason: ${p.reason}`,
       });
       return;
     }
@@ -185,6 +206,17 @@ export async function decideChange(
       targetLabel: request.targetLabel,
       note: `${label} (asked by ${request.requestedByName})${decisionNote ? ` · ${decisionNote}` : ""}`,
     });
+    // Turning down a "reject this signup" request puts the signup back in the queue; say so on the signup's own history.
+    const signupId = request.type === "SIGNUP_REJECT" ? (request.payload as { signupId?: unknown } | null)?.signupId : null;
+    if (typeof signupId === "string") {
+      await recordAudit(actor, {
+        action: "signup.reinstate",
+        targetType: "signup",
+        targetId: signupId,
+        targetLabel: request.targetLabel,
+        note: `Rejection asked for by ${request.requestedByName}${request.reason ? ` (reason: ${request.reason})` : ""} was not approved${decisionNote ? ` · ${decisionNote}` : ""}`,
+      });
+    }
     return { status: "REJECTED" };
   }
 

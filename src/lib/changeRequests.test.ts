@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, REASON_MAX,
+  billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, parseSignupReject,
+  requestStatusLabel, REASON_MAX,
 } from "./changeRequests";
 
 describe("isChangeType / billingActionFor", () => {
@@ -85,5 +86,31 @@ describe("parseExtension", () => {
   it("describes the request", () => {
     expect(describeChange("HOLD_EXTEND", { months: 2 })).toContain("2 more months");
     expect(describeChange("HOLD_EXTEND", { months: 1 })).toContain("1 more month ");
+  });
+});
+
+describe("rejecting a signup (SIGNUP_REJECT)", () => {
+  it("is a request type that is not a billing action", () => {
+    expect(isChangeType("SIGNUP_REJECT")).toBe(true);
+    expect(billingActionFor("SIGNUP_REJECT")).toBeNull();
+    expect(describeChange("SIGNUP_REJECT", { signupId: "s1", reason: "x" })).toContain("re-instate");
+  });
+
+  it("needs a written reason, tidied and capped", () => {
+    expect(parseSignupReject("s1", "  Looks like a duplicate  ")).toEqual({ ok: true, payload: { signupId: "s1", reason: "Looks like a duplicate" } });
+    expect(parseSignupReject("s1", "").ok).toBe(false);
+    expect(parseSignupReject("s1", "   ").ok).toBe(false);
+    expect(parseSignupReject("s1", undefined).ok).toBe(false);
+    expect(parseSignupReject("s1", 42).ok).toBe(false);
+    const long = parseSignupReject("s1", "x".repeat(REASON_MAX + 50));
+    expect(long.ok && long.payload.reason).toHaveLength(REASON_MAX);
+  });
+
+  it("words the outcome as re-instated when an admin turns the request down", () => {
+    expect(requestStatusLabel("SIGNUP_REJECT", "PENDING")).toBe("Waiting for approval");
+    expect(requestStatusLabel("SIGNUP_REJECT", "APPROVED")).toBe("Rejection approved");
+    expect(requestStatusLabel("SIGNUP_REJECT", "REJECTED")).toBe("Signup re-instated");
+    expect(requestStatusLabel("PLAN_CHANGE", "REJECTED")).toBe("Rejected");
+    expect(requestStatusLabel("PLAN_CHANGE", "APPROVED")).toBe("Approved");
   });
 });

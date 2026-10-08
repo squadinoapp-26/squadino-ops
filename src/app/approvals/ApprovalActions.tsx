@@ -2,7 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function ApprovalActions({ id }: { id: string }) {
+export default function ApprovalActions({ id, type }: { id: string; type?: string }) {
+  // For "reject this signup", approving makes the rejection final and turning it down puts the signup back in the queue.
+  const signupReject = type === "SIGNUP_REJECT";
   const router = useRouter();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -34,11 +36,11 @@ export default function ApprovalActions({ id }: { id: string }) {
       <div className="flex gap-3">
         <button type="button" onClick={() => decide("approve")} disabled={busy !== null}
           className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
-          {busy === "approve" ? "Approving…" : "Approve and apply"}
+          {busy === "approve" ? "Approving…" : signupReject ? "Approve rejection" : "Approve and apply"}
         </button>
         <button type="button" onClick={() => decide("reject")} disabled={busy !== null}
           className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
-          {busy === "reject" ? "Rejecting…" : "Reject"}
+          {busy === "reject" ? (signupReject ? "Re-instating…" : "Rejecting…") : signupReject ? "Re-instate signup" : "Reject"}
         </button>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}

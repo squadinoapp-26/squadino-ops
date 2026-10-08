@@ -4,7 +4,9 @@ import Link from "next/link";
 import SignupActions from "./SignupActions";
 import SignupEditor from "./SignupEditor";
 import { isDummyPaymentId } from "@/lib/payment";
-import { getPlatformUser, canReviewSignups, canEditSignups, canViewLogs, requirePlatformSessionOrRedirect } from "@/lib/auth";
+import RejectionDecision from "@/components/RejectionDecision";
+import { pendingRejectionFor } from "@/lib/signupRejection.server";
+import { getPlatformUser, canReviewSignups, canEditSignups, canViewLogs, canApproveChanges, requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { signupPackageLabel } from "@/lib/signupPackages";
 import { slugify } from "@/lib/subdomain";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
@@ -21,6 +23,11 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
     getPlatformUser(),
   ]);
   if (!signup) notFound();
+
+  // A moderator's rejection waits for an admin: until then the signup can't be approved or rejected again.
+  const pendingRejection = signup.status === "PENDING" ? await pendingRejectionFor(signup.id) : null;
+  const canDecideRejection = canApproveChanges(viewer?.role);
+  const when = (d: Date) => new Date(d).toLocaleString("en-AU", { timeZone: "Australia/Melbourne" });
 
   const address = [signup.street, signup.suburb, signup.postcode].filter(Boolean).join(", ");
 
@@ -71,6 +78,7 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
         <Link href="/signups" className="text-slate-500 hover:text-white text-sm">← Back</Link>
         <h1 className="font-bold text-lg">{signup.clubName}</h1>
         <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono uppercase">{signup.status}</span>
+        {pendingRejection && <span className="text-xs bg-red-900 text-red-300 px-2 py-0.5 rounded-full">Rejection waiting for an admin</span>}
         {canViewLogs(viewer?.role) && (
           <Link href={`/logs?item=${signup.id}`} className="ml-auto text-sm text-slate-400 hover:text-white">History →</Link>
         )}
@@ -110,7 +118,35 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
           </div>
         )}
 
-        {signup.status === "PENDING" && (
+        {pendingRejection && (
+          <div className="bg-slate-800 border border-red-800/60 rounded-2xl p-6 space-y-3">
+            <p className="font-semibold">Rejection waiting for an admin</p>
+            <p className="text-sm text-slate-300">
+              {`${pendingRejection.requestedByName} wants this signup rejected (${when(pendingRejection.createdAt)}).`}
+            </p>
+            <p className="text-sm rounded-xl bg-slate-900/60 border border-slate-700 p-3">{`Reason: ${pendingRejection.reason}`}</p>
+            {canDecideRejection ? (
+              <>
+                <p className="text-xs text-slate-400">
+                  Approve the rejection to make it final, or re-instate the signup to put it back with the signups waiting for review.
+                </p>
+                <RejectionDecision kind="request" requestId={pendingRejection.requestId} />
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">An admin will check this. Nothing more to do until they decide.</p>
+            )}
+          </div>
+        )}
+
+        {signup.status === "REJECTED" && canDecideRejection && (
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-3">
+            <p className="font-semibold">Re-instate this signup</p>
+            <p className="text-xs text-slate-400">Puts it back with the signups waiting for review, so it can be approved or rejected again.</p>
+            <RejectionDecision kind="rejected" signupId={signup.id} />
+          </div>
+        )}
+
+        {signup.status === "PENDING" && !pendingRejection && (
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-4">
             {signup.stripeCustomerId && (
               <div className="rounded-xl bg-slate-900/60 border border-slate-700 p-4 text-sm text-slate-300">
@@ -123,6 +159,7 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
               </div>
             )}
             <SignupActions id={signup.id} needsPaymentCheck={!!signup.stripeCustomerId} canReview={canReviewSignups(viewer?.role)}
+              canRejectNow={canApproveChanges(viewer?.role)}
               suggestedSubdomain={slugify(signup.clubName)} rootDomain={ROOT_DOMAIN} />
           </div>
         )}
