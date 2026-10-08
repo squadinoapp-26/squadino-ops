@@ -6,19 +6,15 @@ import { recordAudit } from "@/lib/auditLog.server";
 import { isMissingTable } from "@/lib/prismaErrors";
 import { runClubBillingAction } from "@/lib/clubBillingApi.server";
 import {
-  CHANGE_TYPES, billingActionFor, type ChangeType, type PackageEditPayload, type PlanChangePayload, type SignupRejectPayload,
+  CHANGE_TYPES, billingActionFor, decisionNoteRequired, type ChangeType, type PackageEditPayload, type PlanChangePayload,
+  type SignupPreApprovePayload, type SignupRejectPayload,
 } from "@/lib/changeRequests";
+import { ChangeError } from "@/lib/changeError";
+import { approveSignup } from "@/lib/signupApproval.server";
+
+export { ChangeError };
 
 type Actor = { id: string; name: string; role: string };
-
-// A problem the person can read and act on (a bad value, Stripe saying no, ...).
-export class ChangeError extends Error {
-  status: number;
-  constructor(message: string, status = 400) {
-    super(message);
-    this.status = status;
-  }
-}
 
 /**
  * Carries out a change. Used both when an admin makes it directly and when an admin approves a
@@ -110,6 +106,13 @@ export async function executeChange(
       return;
     }
 
+    case "SIGNUP_PREAPPROVE": {
+      // The admin's approval of a pre-approved signup: the club is created now, in the admin's name.
+      const p = payload as SignupPreApprovePayload;
+      await approveSignup({ signupId: p.signupId, slug: p.slug, paymentChecked: p.paymentChecked === true, actor, note: note ?? null });
+      return;
+    }
+
     default: {
       // Account hold, resume and cancel are done in Stripe by the club app.
       const action = billingActionFor(type);
@@ -181,18 +184,24 @@ export async function submitChange(
   }
 }
 
-/** An admin approves (the change is made now) or rejects a pending request. */
+/**
+ * An admin approves (the change is made now) or rejects a pending request. Deciding on a new signup always
+ * needs a written reason, whichever way it goes. `extra.slug` lets the admin change the web address of a
+ * pre-approved club as they approve it.
+ */
 export async function decideChange(
   id: string,
   decision: "approve" | "reject",
   decisionNote: string | null,
   actor: Actor,
+  extra?: { slug?: string },
 ): Promise<{ status: "APPROVED" | "REJECTED" | "FAILED"; error?: string }> {
   if (!canApproveChanges(actor.role)) throw new ChangeError("Only super admins and admins can approve or reject changes.", 403);
 
   const request = await prisma.changeRequest.findUnique({ where: { id } });
   if (!request) throw new ChangeError("Request not found", 404);
   if (request.status !== "PENDING") throw new ChangeError("This request has already been decided.", 409);
+  if (decisionNoteRequired(request.type) && !decisionNote) throw new ChangeError("Give a reason for your decision.", 400);
 
   const decided = { decidedById: actor.id, decidedByName: actor.name, decidedAt: new Date(), decisionNote };
   const label = CHANGE_TYPES[request.type as ChangeType] ?? request.type;
@@ -206,27 +215,30 @@ export async function decideChange(
       targetLabel: request.targetLabel,
       note: `${label} (asked by ${request.requestedByName})${decisionNote ? ` · ${decisionNote}` : ""}`,
     });
-    // Turning down a "reject this signup" request puts the signup back in the queue; say so on the signup's own history.
-    const signupId = request.type === "SIGNUP_REJECT" ? (request.payload as { signupId?: unknown } | null)?.signupId : null;
+    // Turning a signup request down puts the signup back in the queue; say so on the signup's own history too.
+    const signupId = decisionNoteRequired(request.type) ? (request.payload as { signupId?: unknown } | null)?.signupId : null;
     if (typeof signupId === "string") {
+      const preapprove = request.type === "SIGNUP_PREAPPROVE";
       await recordAudit(actor, {
-        action: "signup.reinstate",
+        action: preapprove ? "signup.preapprove_declined" : "signup.reinstate",
         targetType: "signup",
         targetId: signupId,
         targetLabel: request.targetLabel,
-        note: `Rejection asked for by ${request.requestedByName}${request.reason ? ` (reason: ${request.reason})` : ""} was not approved${decisionNote ? ` · ${decisionNote}` : ""}`,
+        note: `${preapprove ? "Pre-approval" : "Rejection"} asked for by ${request.requestedByName}${request.reason ? ` (${preapprove ? "notes" : "reason"}: ${request.reason})` : ""} was not approved · Admin's reason: ${decisionNote}`,
       });
     }
     return { status: "REJECTED" };
   }
 
+  const payload =
+    request.type === "SIGNUP_PREAPPROVE" && extra?.slug ? { ...(request.payload as object), slug: extra.slug } : request.payload;
   try {
     await executeChange(
       request.type as ChangeType,
       request.clubId,
-      request.payload,
+      payload,
       actor,
-      `Approved request from ${request.requestedByName}${request.reason ? ` (reason: ${request.reason})` : ""}`,
+      `Approved request from ${request.requestedByName}${request.reason ? ` (${request.type === "SIGNUP_PREAPPROVE" ? "notes" : "reason"}: ${request.reason})` : ""}${decisionNote ? ` · Admin's reason: ${decisionNote}` : ""}`,
     );
   } catch (e) {
     const error = e instanceof Error ? e.message : "The change could not be applied";
@@ -236,7 +248,7 @@ export async function decideChange(
       targetType: "request",
       targetId: id,
       targetLabel: request.targetLabel,
-      note: `${label} approved but NOT applied: ${error}`,
+      note: `${label} approved but NOT applied: ${error}${decisionNote ? ` · Admin's reason: ${decisionNote}` : ""}`,
     });
     return { status: "FAILED", error };
   }

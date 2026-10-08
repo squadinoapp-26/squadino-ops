@@ -1,5 +1,5 @@
 import Link from "next/link";
-import RejectionDecision from "@/components/RejectionDecision";
+import SignupRequestDecision from "@/components/SignupRequestDecision";
 
 const when = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", dateStyle: "medium" });
 
@@ -35,7 +35,7 @@ export default function RejectedClubsPanel({ waiting, rejected }: { waiting: Wai
           <h2 className="font-semibold">Rejected clubs</h2>
           <p className="text-xs text-slate-400 mt-0.5">
             When a moderator rejects a signup it waits here for you. Approve the rejection to make it final, or re-instate the signup to put it
-            back with the signups waiting for review. Signups already rejected can be re-instated too.
+            back with the signups waiting for review. Signups already rejected can be re-instated too. Whichever you choose, you give a reason, and it is recorded with your name.
           </p>
         </div>
         {waiting.length > 0 && (
@@ -53,7 +53,7 @@ export default function RejectedClubsPanel({ waiting, rejected }: { waiting: Wai
               <p className="text-sm text-slate-300 mt-1">{`Reason: ${r.reason}`}</p>
               <p className="text-xs text-slate-500 mt-0.5">{`Asked by ${r.requestedByName} · ${when.format(r.createdAt)}`}</p>
             </div>
-            <RejectionDecision kind="request" requestId={r.requestId} />
+            <SignupRequestDecision kind="reject-request" requestId={r.requestId} />
           </li>
         ))}
         {rejected.map((s) => (
@@ -67,7 +67,7 @@ export default function RejectedClubsPanel({ waiting, rejected }: { waiting: Wai
                 {`${s.rejectedByName ? `Rejected by ${s.rejectedByName}` : "Rejected"}${s.rejectedAt ? ` · ${when.format(s.rejectedAt)}` : ""}`}
               </p>
             </div>
-            <RejectionDecision kind="rejected" signupId={s.signupId} />
+            <SignupRequestDecision kind="rejected" signupId={s.signupId} />
           </li>
         ))}
       </ul>

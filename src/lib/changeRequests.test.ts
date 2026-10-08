@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, parseSignupReject,
-  requestStatusLabel, REASON_MAX,
+  billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, parseSignupPreApprove, parseSignupReject,
+  decisionNoteRequired, requestStatusLabel, REASON_MAX,
 } from "./changeRequests";
 
 describe("isChangeType / billingActionFor", () => {
@@ -112,5 +112,46 @@ describe("rejecting a signup (SIGNUP_REJECT)", () => {
     expect(requestStatusLabel("SIGNUP_REJECT", "REJECTED")).toBe("Signup re-instated");
     expect(requestStatusLabel("PLAN_CHANGE", "REJECTED")).toBe("Rejected");
     expect(requestStatusLabel("PLAN_CHANGE", "APPROVED")).toBe("Approved");
+  });
+});
+
+describe("pre-approving a signup (SIGNUP_PREAPPROVE)", () => {
+  it("is a request type that is not a billing action", () => {
+    expect(isChangeType("SIGNUP_PREAPPROVE")).toBe(true);
+    expect(billingActionFor("SIGNUP_PREAPPROVE")).toBeNull();
+    expect(describeChange("SIGNUP_PREAPPROVE", { signupId: "s1", slug: "walkerscc" })).toContain("walkerscc.squadino.com");
+    expect(describeChange("SIGNUP_PREAPPROVE", { signupId: "s1" })).toContain("send it back");
+  });
+
+  it("makes the pre-approver confirm the payment on a paid plan, and notes are optional", () => {
+    expect(parseSignupPreApprove("s1", { slug: " walkerscc ", paymentChecked: true, notes: " Checked in Stripe " }, { needsPaymentCheck: true })).toEqual({
+      ok: true,
+      payload: { signupId: "s1", slug: "walkerscc", paymentChecked: true, notes: "Checked in Stripe" },
+    });
+    expect(parseSignupPreApprove("s1", { paymentChecked: false }, { needsPaymentCheck: true }).ok).toBe(false);
+    expect(parseSignupPreApprove("s1", {}, { needsPaymentCheck: true }).ok).toBe(false);
+    expect(parseSignupPreApprove("s1", {}, { needsPaymentCheck: false })).toEqual({
+      ok: true,
+      payload: { signupId: "s1", paymentChecked: false, notes: null },
+    });
+  });
+
+  it("caps the notes", () => {
+    const r = parseSignupPreApprove("s1", { notes: "x".repeat(REASON_MAX + 20) }, { needsPaymentCheck: false });
+    expect(r.ok && r.payload.notes).toHaveLength(REASON_MAX);
+  });
+
+  it("words the outcome as club created / sent back", () => {
+    expect(requestStatusLabel("SIGNUP_PREAPPROVE", "APPROVED")).toBe("Approved: club created");
+    expect(requestStatusLabel("SIGNUP_PREAPPROVE", "REJECTED")).toBe("Sent back for review");
+  });
+});
+
+describe("decisionNoteRequired", () => {
+  it("makes an admin give a reason on both kinds of signup request, and on no other change", () => {
+    expect(decisionNoteRequired("SIGNUP_REJECT")).toBe(true);
+    expect(decisionNoteRequired("SIGNUP_PREAPPROVE")).toBe(true);
+    expect(decisionNoteRequired("PLAN_CHANGE")).toBe(false);
+    expect(decisionNoteRequired("HOLD_START")).toBe(false);
   });
 });

@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getPlatformUser, canReviewSignups } from "@/lib/auth";
 import { recordAudit } from "@/lib/auditLog.server";
 import { parseSignupReject } from "@/lib/changeRequests";
-import { submitChange, ChangeError } from "@/lib/changeRequests.server";
-import { pendingRejectionFor } from "@/lib/signupRejection.server";
+import { submitChange } from "@/lib/changeRequests.server";
+import { ChangeError } from "@/lib/changeError";
+import { pendingRequestFor } from "@/lib/signupReview.server";
 
 // Rejecting a signup always needs a written reason. Super admins and admins reject straight away;
 // a moderator (or customer care) only SENDS the rejection to an admin, who approves it or re-instates
@@ -22,8 +23,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const signup = await prisma.signupRequest.findUnique({ where: { id }, select: { clubName: true, status: true } });
   if (!signup) return NextResponse.json({ error: "Signup request not found" }, { status: 404 });
   if (signup.status !== "PENDING") return NextResponse.json({ error: "Already reviewed" }, { status: 409 });
-  if (await pendingRejectionFor(id)) {
-    return NextResponse.json({ error: "A rejection for this signup is already waiting for an admin." }, { status: 409 });
+  if (await pendingRequestFor(id)) {
+    return NextResponse.json({ error: "This signup is already waiting for an admin's decision. An admin needs to decide that first." }, { status: 409 });
   }
 
   try {

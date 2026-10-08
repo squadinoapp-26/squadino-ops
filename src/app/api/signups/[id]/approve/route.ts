@@ -1,69 +1,75 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { provisionSignup } from "@/lib/signupProvisioning";
-import { getPlatformUser, canReviewSignups } from "@/lib/auth";
+import { getPlatformUser, canReviewSignups, canApproveChanges } from "@/lib/auth";
 import { recordAudit } from "@/lib/auditLog.server";
-import { normaliseSubdomain, subdomainProblem } from "@/lib/subdomain";
+import { cleanReason, parseSignupPreApprove } from "@/lib/changeRequests";
+import { submitChange } from "@/lib/changeRequests.server";
+import { ChangeError } from "@/lib/changeError";
+import { approveSignup, checkWebAddress } from "@/lib/signupApproval.server";
+import { pendingRequestFor } from "@/lib/signupReview.server";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
-import { pendingRejectionFor } from "@/lib/signupRejection.server";
 
-// Step 1 of setting a new client up: a platform admin or moderator has
-// checked the signup (and, for a paid plan, its payment in Stripe) and
-// approves it, which creates the Club + owner account. Nothing is emailed
-// yet — the admin then sets the club's subdomain up and sends the owner's
-// setup email from /clubs/[id] (see the setup routes there).
+// Step 1 of setting a new client up. Super admins and admins approve here and now, with a written reason, which
+// creates the Club + owner account. A moderator or customer care officer can only PRE-APPROVE (they have checked
+// the signup and, for a paid plan, its payment in Stripe; notes are optional): that goes to an admin, who makes the
+// final approval. Either way nothing is emailed yet: the admin then sets the club's subdomain up and sends the
+// owner's setup email from /clubs/[id] (see the setup routes there).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const reviewer = await getPlatformUser();
-  if (!canReviewSignups(reviewer?.role)) {
-    return NextResponse.json({ error: "Only platform admins and moderators can approve signups." }, { status: 403 });
+  if (!reviewer || !canReviewSignups(reviewer.role)) {
+    return NextResponse.json({ error: "Only platform staff can approve signups." }, { status: 403 });
   }
 
-  const signup = await prisma.signupRequest.findUnique({ where: { id } });
+  const signup = await prisma.signupRequest.findUnique({ where: { id }, select: { clubName: true, status: true, stripeCustomerId: true } });
   if (!signup) return NextResponse.json({ error: "Signup request not found" }, { status: 404 });
   if (signup.status !== "PENDING") return NextResponse.json({ error: "Already reviewed" }, { status: 409 });
-  if (await pendingRejectionFor(id)) {
+  if (await pendingRequestFor(id)) {
     return NextResponse.json(
-      { error: "A rejection for this signup is waiting for an admin. An admin needs to approve the rejection or re-instate the signup first." },
+      { error: "This signup is already waiting for an admin's decision. An admin needs to decide that first." },
       { status: 409 },
     );
   }
 
-  // A paid plan has a payment behind it; the reviewer must confirm they've
-  // checked it before a club is created.
   const body = await req.json().catch(() => ({}));
-  if (signup.stripeCustomerId && body?.paymentChecked !== true) {
-    return NextResponse.json({ error: "Confirm you've checked this signup's payment first." }, { status: 400 });
-  }
 
-  // The club's {slug}.squadino.com, chosen by the approver so a long club
-  // name doesn't become a long web address. Checked here rather than left to
-  // createClub, which would quietly add a number to a taken one.
-  let slug: string | undefined;
-  if (typeof body?.slug === "string" && body.slug.trim()) {
-    slug = normaliseSubdomain(body.slug);
-    const problem = subdomainProblem(slug);
-    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
-    if (await prisma.club.findUnique({ where: { slug }, select: { id: true } })) {
-      return NextResponse.json({ error: `${slug}.${ROOT_DOMAIN} is already taken — pick another web address.` }, { status: 409 });
+  try {
+    if (canApproveChanges(reviewer.role)) {
+      const reason = cleanReason(body?.reason);
+      if (!reason) return NextResponse.json({ error: "Give a reason for approving this signup." }, { status: 400 });
+      const result = await approveSignup({
+        signupId: id,
+        slug: body?.slug,
+        paymentChecked: body?.paymentChecked === true,
+        actor: reviewer,
+        note: `Reason: ${reason}`,
+      });
+      return NextResponse.json({ ok: true, clubId: result.clubId, clubCode: result.clubCode });
     }
+
+    // A pre-approval: checked here so the admin isn't sent something that can't be approved.
+    const parsed = parseSignupPreApprove(id, body, { needsPaymentCheck: !!signup.stripeCustomerId });
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const slug = await checkWebAddress(parsed.payload.slug);
+    const payload = { ...parsed.payload, slug };
+
+    await submitChange({ type: "SIGNUP_PREAPPROVE", clubId: null, payload, reason: payload.notes, targetLabel: signup.clubName }, reviewer);
+    // The request itself is logged by submitChange; this line puts it on the signup's own history too.
+    await recordAudit(reviewer, {
+      action: "signup.preapprove",
+      targetType: "signup",
+      targetId: id,
+      targetLabel: signup.clubName,
+      note: [
+        slug ? `Web address ${slug}.${ROOT_DOMAIN}` : "Web address from the club name",
+        payload.paymentChecked ? "payment checked" : "no payment to check",
+        payload.notes ? `Notes: ${payload.notes}` : null,
+      ].filter(Boolean).join(" · "),
+    });
+    return NextResponse.json({ ok: true, requested: true });
+  } catch (e) {
+    if (e instanceof ChangeError) return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
   }
-
-  const result = await provisionSignup(signup, slug);
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-
-  await prisma.signupRequest.update({
-    where: { id },
-    data: { status: "APPROVED", reviewedAt: new Date(), reviewedByPlatformUserId: reviewer!.id },
-  });
-  await recordAudit(reviewer, {
-    action: "signup.approve",
-    targetType: "signup",
-    targetId: id,
-    targetLabel: signup.clubName,
-    note: `Created club ${result.club.name} (${result.club.code}) at ${result.club.slug}.${ROOT_DOMAIN}`,
-  });
-
-  return NextResponse.json({ ok: true, clubId: result.club.id, clubCode: result.club.code });
 }
