@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getPlatformUser, canViewLogs } from "@/lib/auth";
 import { listAuditLogs, LOGS_PAGE_SIZE, type AuditLogRow } from "@/lib/auditLog.server";
-import { auditActionLabel, formatAuditValue } from "@/lib/auditLog";
+import { auditActionLabel, formatAuditValue, isAuditAction, parseDateInput, taskOptions } from "@/lib/auditLog";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default async function PlatformLogsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; item?: string }>;
+  searchParams: Promise<{ page?: string; item?: string; q?: string; task?: string; from?: string; to?: string }>;
 }) {
   const viewer = await getPlatformUser();
   if (!canViewLogs(viewer?.role)) {
@@ -37,13 +37,26 @@ export default async function PlatformLogsPage({
     );
   }
 
-  const { page: pageParam, item } = await searchParams;
+  const { page: pageParam, item, q: qParam, task: taskParam, from: fromParam, to: toParam } = await searchParams;
   const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
-  const { rows, total, missingTable } = await listAuditLogs({ page, targetId: item });
+  const q = (qParam ?? "").trim().slice(0, 200);
+  // Only values the page understands are kept, so a hand-edited address can't do anything odd.
+  const task = isAuditAction(taskParam) ? taskParam : "";
+  const from = parseDateInput(fromParam) ? fromParam! : "";
+  const to = parseDateInput(toParam) ? toParam! : "";
+  const filtered = !!(q || task || from || to);
+  const { rows, total, missingTable } = await listAuditLogs({ page, targetId: item, query: q, task, from, to });
   const pages = Math.max(1, Math.ceil(total / LOGS_PAGE_SIZE));
   const live = await existingTargets(rows);
 
-  const pageHref = (p: number) => `/logs?${new URLSearchParams({ ...(item && { item }), page: String(p) })}`;
+  const keep = { ...(item && { item }), ...(q && { q }), ...(task && { task }), ...(from && { from }), ...(to && { to }) };
+  const pageHref = (p: number) => `/logs?${new URLSearchParams({ ...keep, page: String(p) })}`;
+  const clearHref = item ? `/logs?item=${encodeURIComponent(item)}` : "/logs";
+  const describeFilters = [
+    q && `“${q}”`,
+    task && auditActionLabel(task),
+    (from || to) && (from && to ? (from === to ? `on ${from}` : `from ${from} to ${to}`) : from ? `from ${from}` : `up to ${to}`),
+  ].filter(Boolean).join(" · ");
 
   return (
     <Shell>
@@ -51,6 +64,65 @@ export default async function PlatformLogsPage({
         Every change made in this console: who made it, when (Melbourne time) and what it was before and after.
         Entries can&apos;t be edited or deleted.
       </p>
+
+      <form action="/logs" method="get" className="space-y-3 bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
+        {item && <input type="hidden" name="item" value={item} />}
+        <div className="flex gap-2">
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            maxLength={200}
+            placeholder="Search by club name, staff name, username, email, web address, date or reason…"
+            aria-label="Search the Logs"
+            className="flex-1 min-w-0 bg-slate-900 border border-slate-700 focus:border-slate-500 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+          />
+          <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
+            Search
+          </button>
+          {filtered && (
+            <Link href={clearHref}
+              className="bg-slate-700 hover:bg-slate-600 text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap">
+              Clear
+            </Link>
+          )}
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs text-slate-400 space-y-1">
+            <span className="block">Task</span>
+            <select name="task" defaultValue={task} aria-label="Task"
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-slate-500 max-w-xs">
+              <option value="">Any task</option>
+              {taskOptions().map((g) => (
+                <optgroup key={g.group} label={g.group}>
+                  {g.tasks.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs text-slate-400 space-y-1">
+            <span className="block">From date</span>
+            <input type="date" name="from" defaultValue={from} aria-label="From date"
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-slate-500 [color-scheme:dark]" />
+          </label>
+          <label className="text-xs text-slate-400 space-y-1">
+            <span className="block">To date</span>
+            <input type="date" name="to" defaultValue={to} aria-label="To date"
+              className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-slate-500 [color-scheme:dark]" />
+          </label>
+        </div>
+        <p className="text-xs text-slate-500">
+          The search finds clubs and signups (by name, web address or contact), staff (by name or email), a club&apos;s owner (by name,
+          username or email), the reasons and notes, what was changed, the kind of task (&quot;setup email&quot;, &quot;subdomain&quot;,
+          &quot;hold&quot;…) and a date typed as 9/10/2026. Every word you type has to match. Dates are Melbourne days.
+        </p>
+      </form>
+
+      {filtered && !missingTable && (
+        <p className="text-sm text-slate-300">
+          {total === 0 ? "No entries match" : `${total} ${total === 1 ? "entry matches" : "entries match"}`} <strong>{describeFilters}</strong>.
+        </p>
+      )}
 
       {missingTable && (
         <p className="rounded-xl bg-amber-950 text-amber-300 px-4 py-3 text-sm">
@@ -68,7 +140,7 @@ export default async function PlatformLogsPage({
 
       {!missingTable && rows.length === 0 && (
         <div className="text-center py-16 text-slate-500">
-          <p className="font-medium">No changes recorded yet.</p>
+          <p className="font-medium">{filtered ? "Nothing found. Try fewer words, another task or a wider date range." : "No changes recorded yet."}</p>
         </div>
       )}
 

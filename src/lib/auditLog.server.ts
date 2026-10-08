@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import type { AuditAction, AuditChange, AuditTargetType } from "@/lib/auditLog";
+import {
+  actionsMatching, escapeLike, isAuditAction, melbourneRange, parseDateInput, parseDayWord, searchWords, slugOfHost, urlHost,
+  type AuditAction, type AuditChange, type AuditTargetType,
+} from "@/lib/auditLog";
+import { ROOT_DOMAIN } from "@/lib/hostClub";
 
 type Actor = { id: string; name: string; role: string } | null;
 
@@ -58,18 +62,103 @@ export type AuditLogRow = {
   note: string | null;
 };
 
+const CANDIDATES_MAX = 500;
+
 /**
- * A page of log entries, newest first, optionally only those for one item.
- * `missingTable` is true when the table doesn't exist yet, so the Logs page
- * can say so instead of erroring.
+ * What one search word can mean. The Logs keep the names as they were when something happened, so a word is
+ * also looked up in the live tables (a club that was renamed, a staff member whose name changed, the person who
+ * owns a club) and matched on their ids.
  */
-export async function listAuditLogs({ page = 1, targetId }: { page?: number; targetId?: string }): Promise<{
+async function wordClause(word: string): Promise<Prisma.PlatformAuditLogWhereInput> {
+  // A web address ("https://walkerscc.squadino.com/") is matched on its host, and a club's own address on its slug too.
+  const host = urlHost(word);
+  const needle = host ?? word;
+  const slug = host ? slugOfHost(host, ROOT_DOMAIN) : null;
+  // Prisma passes % and _ through to LIKE as wildcards, so a typed one is escaped to be searched for literally.
+  const like = { contains: escapeLike(needle), mode: "insensitive" as const };
+  const [staff, clubs, owners, signups, inChanges] = await Promise.all([
+    prisma.platformUser.findMany({ where: { OR: [{ name: like }, { email: like }] }, select: { id: true }, take: CANDIDATES_MAX }),
+    prisma.club.findMany({
+      where: { OR: [{ name: like }, { slug: like }, { code: like }, { customDomain: like }, ...(slug ? [{ slug }] : [])] },
+      select: { id: true },
+      take: CANDIDATES_MAX,
+    }),
+    // Club owners and admins: their name, username or email finds the club's records.
+    prisma.user.findMany({
+      where: { role: { in: ["ADMIN", "SUPER_ADMIN"] }, status: { not: "REMOVED" }, OR: [{ name: like }, { username: like }, { email: like }] },
+      select: { clubId: true },
+      take: CANDIDATES_MAX,
+    }),
+    prisma.signupRequest.findMany({
+      where: {
+        OR: [
+          { clubName: like }, { registeredName: like }, { contactName: like }, { contactEmail: like }, { requestedUrl: like },
+          ...(slug ? [{ requestedUrl: { contains: slug, mode: "insensitive" as const } }] : []),
+        ],
+      },
+      select: { id: true },
+      take: CANDIDATES_MAX,
+    }),
+    // What was changed, before and after (kept as JSON).
+    prisma.$queryRaw<{ id: string }[]>`SELECT id FROM platform_audit_logs WHERE changes::text ILIKE ${`%${escapeLike(needle)}%`} LIMIT ${CANDIDATES_MAX}`,
+  ]);
+
+  const actions = actionsMatching(word);
+  const staffIds = staff.map((u) => u.id);
+  const targetIds = [...clubs.map((c) => c.id), ...owners.map((o) => o.clubId), ...signups.map((r) => r.id), ...staffIds];
+
+  return {
+    OR: [
+      { targetLabel: like },
+      { actorName: like },
+      { actorRole: like },
+      { note: like },
+      { targetType: like },
+      ...(actions.length ? [{ action: { in: actions } }] : []),
+      ...(staffIds.length ? [{ actorId: { in: staffIds } }] : []),
+      ...(targetIds.length ? [{ targetId: { in: targetIds } }] : []),
+      ...(inChanges.length ? [{ id: { in: inChanges.map((r) => r.id) } }] : []),
+    ],
+  };
+}
+
+/**
+ * A page of log entries, newest first, optionally narrowed by any of:
+ *  - `task`: one kind of task (an action such as "club.setup_email"),
+ *  - `from` / `to`: dates (yyyy-mm-dd, Melbourne days, both included),
+ *  - `query`: words that ALL have to match something in the entry: the club or item name, a web address, who did it
+ *    (name, email, role), the reason or note, what was changed, the wording of the task, a club's owner, or a date typed
+ *    as 9/10/2026 or 2026-10-09,
+ *  - `targetId`: the history of one item.
+ * `missingTable` is true when the table doesn't exist yet, so the Logs page can say so instead of erroring.
+ */
+export async function listAuditLogs({ page = 1, targetId, query, task, from, to }: {
+  page?: number;
+  targetId?: string;
+  query?: string;
+  task?: string;
+  from?: string;
+  to?: string;
+}): Promise<{
   rows: AuditLogRow[];
   total: number;
   missingTable: boolean;
 }> {
-  const where = targetId ? { targetId } : {};
   try {
+    const words = searchWords(query);
+    const days = words.map(parseDayWord);
+    const textClauses = await Promise.all(words.filter((_, i) => !days[i]).map(wordClause));
+    const dayClauses = days.flatMap((d) => (d ? [{ createdAt: melbourneRange(d, d) }] : []));
+    const range = melbourneRange(parseDateInput(from), parseDateInput(to));
+    const where: Prisma.PlatformAuditLogWhereInput = {
+      AND: [
+        ...(targetId ? [{ targetId }] : []),
+        ...(isAuditAction(task) ? [{ action: task }] : []),
+        ...(range.gte || range.lt ? [{ createdAt: range }] : []),
+        ...dayClauses,
+        ...textClauses,
+      ],
+    };
     const [rows, total] = await Promise.all([
       prisma.platformAuditLog.findMany({
         where,

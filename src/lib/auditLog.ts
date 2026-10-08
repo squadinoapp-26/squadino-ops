@@ -67,6 +67,143 @@ export function auditActionLabel(action: string): string {
   return (AUDIT_ACTIONS as Record<string, string>)[action] ?? action;
 }
 
+export const SEARCH_MAX_WORDS = 5;
+export const SEARCH_WORD_MAX_LENGTH = 60;
+
+/**
+ * The words of a Logs search: split on spaces, lower-cased, no repeats, and capped so one huge pasted block can't
+ * turn into a heavy database query. An entry has to match EVERY word (each word can match a different field).
+ */
+export function searchWords(input: unknown): string[] {
+  if (typeof input !== "string") return [];
+  const words = input.toLowerCase().split(/\s+/).map((w) => w.slice(0, SEARCH_WORD_MAX_LENGTH)).filter(Boolean);
+  return [...new Set(words)].slice(0, SEARCH_MAX_WORDS);
+}
+
+/** The recorded actions a word stands for, by their wording ("approved" finds "signup.approve" and friends) or their code. */
+export function actionsMatching(word: string): string[] {
+  const w = word.toLowerCase();
+  return Object.entries(AUDIT_ACTIONS)
+    .filter(([key, label]) => key.includes(w) || label.toLowerCase().includes(w))
+    .map(([key]) => key);
+}
+
+/** Makes a word safe to use inside a SQL LIKE pattern, so a typed % or _ is searched for literally. */
+export function escapeLike(word: string): string {
+  return word.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
+/**
+ * The host of a web address someone typed ("https://www.walkerscc.squadino.com/login" -> "walkerscc.squadino.com"), or
+ * null if the word isn't one. Needs a dot, so ordinary words and names are never taken for web addresses.
+ */
+export function urlHost(word: string): string | null {
+  const host = word
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+    .replace(/^www\./, "")
+    .split(/[/?#]/)[0]
+    .replace(/:\d+$/, "");
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : null;
+}
+
+/** "walkerscc.squadino.com" -> "walkerscc" for a club's own address; null for anything else. */
+export function slugOfHost(host: string, rootDomain: string): string | null {
+  const suffix = `.${rootDomain.toLowerCase()}`;
+  if (!host.endsWith(suffix)) return null;
+  const slug = host.slice(0, -suffix.length);
+  return /^[a-z0-9-]+$/.test(slug) ? slug : null;
+}
+
+export interface CalendarDay {
+  y: number;
+  m: number;
+  d: number;
+}
+
+function realDay(y: number, m: number, d: number): CalendarDay | null {
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return y >= 2000 && y <= 2100 && date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d ? { y, m, d } : null;
+}
+
+/** A calendar date typed the Australian way (9/10/2026, 09-10-2026, 9.10.2026) or as 2026-10-09; null if it isn't a real date. */
+export function parseDayWord(word: string): CalendarDay | null {
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(word);
+  if (iso) return realDay(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+  const dmy = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(word);
+  if (dmy) return realDay(Number(dmy[3]), Number(dmy[2]), Number(dmy[1]));
+  return null;
+}
+
+const melbourneParts = new Intl.DateTimeFormat("en-AU", {
+  timeZone: "Australia/Melbourne",
+  hourCycle: "h23",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+// How far Melbourne's clock is ahead of UTC at an instant (10 or 11 hours, depending on daylight saving).
+function melbourneOffsetMs(instant: number): number {
+  const parts = melbourneParts.formatToParts(new Date(instant));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const wall = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return wall - Math.floor(instant / 1000) * 1000;
+}
+
+/** The instant a calendar day starts in Melbourne (the Logs are shown in Melbourne time). */
+export function melbourneDayStart({ y, m, d }: CalendarDay): Date {
+  const guess = Date.UTC(y, m - 1, d);
+  // Done twice so a day on which the clocks change still lands on its real midnight.
+  const first = guess - melbourneOffsetMs(guess);
+  return new Date(guess - melbourneOffsetMs(first));
+}
+
+/** From the start of `from` up to (not including) the start of the day after `to`. */
+export function melbourneRange(from: CalendarDay | null, to: CalendarDay | null): { gte?: Date; lt?: Date } {
+  const range: { gte?: Date; lt?: Date } = {};
+  if (from) range.gte = melbourneDayStart(from);
+  if (to) {
+    const next = new Date(Date.UTC(to.y, to.m - 1, to.d + 1));
+    range.lt = melbourneDayStart({ y: next.getUTCFullYear(), m: next.getUTCMonth() + 1, d: next.getUTCDate() });
+  }
+  return range;
+}
+
+/** The value of a date box (2026-10-09), or null. */
+export function parseDateInput(value: unknown): CalendarDay | null {
+  const m = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  return m ? realDay(Number(m[1]), Number(m[2]), Number(m[3])) : null;
+}
+
+const TASK_GROUPS: Record<string, string> = {
+  signup: "Signups",
+  club: "Clubs (status, subdomain, setup email)",
+  billing: "Billing and account hold",
+  request: "Approval requests",
+  package: "Settings",
+  sport: "Settings",
+  word: "Settings",
+  staff: "Portal users",
+};
+
+/** The tasks that can be picked in the Logs filter, grouped, with their wording. */
+export function taskOptions(): { group: string; tasks: { key: string; label: string }[] }[] {
+  const groups = new Map<string, { key: string; label: string }[]>();
+  for (const [key, label] of Object.entries(AUDIT_ACTIONS)) {
+    const group = TASK_GROUPS[key.split(".")[0]] ?? "Other";
+    groups.set(group, [...(groups.get(group) ?? []), { key, label }]);
+  }
+  return [...groups].map(([group, tasks]) => ({ group, tasks }));
+}
+
+export function isAuditAction(value: unknown): value is AuditAction {
+  return typeof value === "string" && value in AUDIT_ACTIONS;
+}
+
 // Treat "", null and undefined as the same "empty" value, so saving a form
 // that turns a blank optional field from null into "" isn't logged as a change.
 function normalise(value: unknown): AuditValue {
