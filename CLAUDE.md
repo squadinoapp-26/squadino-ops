@@ -12,7 +12,7 @@ is not a developer: plain words, ask before product-behaviour decisions.
 
 ## What it does
 
-Signups (review, edit, approve, reject) · Set up subdomain (Vercel) · Send setup email ·
+Signups (review, edit, approve, reject with a reason an admin must confirm) · Set up subdomain (Vercel) · Send setup email ·
 Club status (deactivate / reactivate / delete after 12 months) · New Client (by hand) ·
 Sports list · Restricted words · Logs · Manage users (staff) · Packages & prices ·
 Manage accounts (searchable club list) · dashboard alerts · each club's Stripe billing status
@@ -42,6 +42,16 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    a `ChangeRequest` that an admin approves at `/approvals` (`decideChange`). Never write to the
    club's plan, user cap or a package, or call the club app's billing API, from a route without
    going through it. Role helpers: `canApproveChanges`, `canManagePackages` (`src/lib/auth.ts`).
+   **Rejecting a new signup is one of these changes** (type `SIGNUP_REJECT`, owner's rule 2026-10-08): it
+   always needs a written reason; super admins and admins reject at once, a moderator or customer care only
+   SENDS the rejection to an admin (`POST /api/signups/[id]/reject` → `submitChange`). While it waits the
+   signup stays PENDING in the database but is left out of the "new signups" list and count
+   (`listPendingRejections` in `src/lib/signupRejection.server.ts`), can't be approved, and shows on the
+   dashboard's admin-only **Rejected clubs** box (`RejectedClubsPanel`) with **Approve rejection** (the
+   signup becomes REJECTED with the reason) or **Re-instate** (the request is turned down, the signup is back
+   in the queue). An already-rejected signup can also be re-instated there or on its page
+   (`POST /api/signups/[id]/reinstate`, admins only; clears the old reason, the Logs keep it). No schema
+   change: it reuses `change_requests`, whose `type` is a plain string.
 6. Staff passwords are at least 12 characters (`src/lib/passwordPolicy.ts`).
 7. Keep the console out of search engines and frames (headers in `next.config.ts`,
    `src/app/robots.ts`, `robots` in the layout).

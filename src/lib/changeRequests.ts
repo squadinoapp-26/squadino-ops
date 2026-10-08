@@ -9,6 +9,7 @@ export const CHANGE_TYPES = {
   HOLD_RESUME: "Resume from account hold",
   SUBSCRIPTION_CANCEL: "Cancel subscription",
   PACKAGE_EDIT: "Edit package price or limit",
+  SIGNUP_REJECT: "Reject a new signup",
 } as const;
 
 export type ChangeType = keyof typeof CHANGE_TYPES;
@@ -51,7 +52,19 @@ export interface PackageEditPayload {
   active: boolean;
 }
 
+export interface SignupRejectPayload {
+  signupId: string;
+  reason: string;
+}
+
 type Parsed<T> = { ok: true; payload: T } | { ok: false; error: string };
+
+/** Rejecting a signup always needs a written reason, so an admin can judge it. */
+export function parseSignupReject(signupId: string, reasonInput: unknown): Parsed<SignupRejectPayload> {
+  const reason = cleanReason(reasonInput);
+  if (!reason) return { ok: false, error: "Give a reason for rejecting this signup." };
+  return { ok: true, payload: { signupId, reason } };
+}
 
 /** A hold extension is 1 or 2 more months at the same price. */
 export function parseExtension(body: unknown): Parsed<ExtensionPayload> {
@@ -125,6 +138,8 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       return "End the hold now: back to the plan and price it was on, with all features";
     case "SUBSCRIPTION_CANCEL":
       return "Cancel the subscription at the end of the period already paid for";
+    case "SIGNUP_REJECT":
+      return "Reject this new signup. Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review";
   }
 }
 
@@ -134,3 +149,12 @@ export const REQUEST_STATUS_LABELS: Record<string, string> = {
   REJECTED: "Rejected",
   FAILED: "Approved, but could not be applied",
 };
+
+/** The status wording for a request; a rejected signup request means the signup was re-instated. */
+export function requestStatusLabel(type: string, status: string): string {
+  if (type === "SIGNUP_REJECT") {
+    if (status === "APPROVED") return "Rejection approved";
+    if (status === "REJECTED") return "Signup re-instated";
+  }
+  return REQUEST_STATUS_LABELS[status] ?? status;
+}

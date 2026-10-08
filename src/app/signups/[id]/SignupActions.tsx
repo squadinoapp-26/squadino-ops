@@ -7,6 +7,7 @@ export default function SignupActions({
   id,
   needsPaymentCheck,
   canReview,
+  canRejectNow,
   suggestedSubdomain,
   rootDomain,
 }: {
@@ -14,6 +15,8 @@ export default function SignupActions({
   // Paid plans: the reviewer confirms they've checked the payment before approving.
   needsPaymentCheck: boolean;
   canReview: boolean;
+  // Super admins and admins reject at once; everyone else sends the rejection to an admin to approve.
+  canRejectNow: boolean;
   // What the club name would give; the reviewer can shorten it before approving.
   suggestedSubdomain: string;
   rootDomain: string;
@@ -50,6 +53,10 @@ export default function SignupActions({
   }
 
   async function reject() {
+    if (!reason.trim()) {
+      setError("Give a reason for rejecting this signup.");
+      return;
+    }
     setBusy(true);
     setError("");
     const res = await fetch(`/api/signups/${id}/reject`, {
@@ -117,20 +124,26 @@ export default function SignupActions({
         </div>
       ) : (
         <div className="space-y-3">
+          <p className="text-xs text-slate-400">
+            {canRejectNow
+              ? "This rejects the signup straight away. It is then listed under Rejected clubs on the dashboard, where it can be re-instated."
+              : "This does not reject the signup yet. Your reason goes to an admin, who approves the rejection or re-instates the signup."}
+          </p>
           <textarea
             value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (optional, internal only)"
+            onChange={(e) => { setReason(e.target.value); setError(""); }}
+            placeholder="Why is this signup being rejected? (required, internal only)"
+            maxLength={500}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm"
-            rows={2}
+            rows={3}
           />
           <div className="flex gap-3">
             <button
               onClick={reject}
-              disabled={busy}
+              disabled={busy || !reason.trim()}
               className="bg-red-700 hover:bg-red-600 disabled:opacity-60 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
             >
-              {busy ? "Rejecting…" : "Confirm reject"}
+              {busy ? (canRejectNow ? "Rejecting…" : "Sending…") : canRejectNow ? "Confirm reject" : "Send to an admin to approve"}
             </button>
             <button
               onClick={() => setRejecting(false)}

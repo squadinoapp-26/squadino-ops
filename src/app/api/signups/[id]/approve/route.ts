@@ -5,6 +5,7 @@ import { getPlatformUser, canReviewSignups } from "@/lib/auth";
 import { recordAudit } from "@/lib/auditLog.server";
 import { normaliseSubdomain, subdomainProblem } from "@/lib/subdomain";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
+import { pendingRejectionFor } from "@/lib/signupRejection.server";
 
 // Step 1 of setting a new client up: a platform admin or moderator has
 // checked the signup (and, for a paid plan, its payment in Stripe) and
@@ -22,6 +23,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const signup = await prisma.signupRequest.findUnique({ where: { id } });
   if (!signup) return NextResponse.json({ error: "Signup request not found" }, { status: 404 });
   if (signup.status !== "PENDING") return NextResponse.json({ error: "Already reviewed" }, { status: 409 });
+  if (await pendingRejectionFor(id)) {
+    return NextResponse.json(
+      { error: "A rejection for this signup is waiting for an admin. An admin needs to approve the rejection or re-instate the signup first." },
+      { status: 409 },
+    );
+  }
 
   // A paid plan has a payment behind it; the reviewer must confirm they've
   // checked it before a club is created.

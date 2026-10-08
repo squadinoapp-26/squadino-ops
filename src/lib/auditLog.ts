@@ -6,6 +6,8 @@ export const AUDIT_ACTIONS = {
   "signup.edit": "Edited signup",
   "signup.approve": "Approved signup",
   "signup.reject": "Rejected signup",
+  "signup.reject_requested": "Asked for a signup to be rejected",
+  "signup.reinstate": "Re-instated signup",
   "club.create": "Created club",
   "club.edit": "Edited club",
   "club.deactivate": "Deactivated club",
