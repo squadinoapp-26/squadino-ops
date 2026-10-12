@@ -26,6 +26,7 @@ export const AUDIT_ACTIONS = {
   "request.reject": "Rejected a change request",
   "package.edit": "Edited package",
   "billing.action": "Billing change (Stripe)",
+  "billing.extra_members_requested": "Club asked for extra members",
   "billing.hold_offered": "Account hold offered to the customer",
   "billing.hold_extension_offered": "Hold extension offered to the customer",
   "billing.hold_extended": "Customer accepted a hold extension",
