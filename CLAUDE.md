@@ -36,6 +36,10 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    `Website/src/lib/packages.ts` — `signupPackages.test.ts` has the expected values written
    out; change both together), `hostClub.ts`, `subdomain.ts`, `sportCatalog.ts`,
    `restrictedWordsList.ts`.
+   **Member limits:** a club's limit is its package's `userCap`, or its override (the club app's
+   `src/lib/memberLimit.ts` enforces it). A club with no package can't add members, so approving a
+   signup must link the `Package` row with the signup's key (`provisionSignup` does), and the club page
+   warns when a club has none. Removed members don't count.
 5. **Sensitive changes need an admin.** Plan / user-limit changes, billing actions (account hold,
    resume, cancel) and package prices go through `submitChange` in
    `src/lib/changeRequests.server.ts`: SUPER_ADMIN and ADMIN make them directly, everyone else creates

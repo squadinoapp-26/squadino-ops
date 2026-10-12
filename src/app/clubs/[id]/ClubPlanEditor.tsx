@@ -34,6 +34,8 @@ export default function ClubPlanEditor({
 
   const currentPackage = packages.find((p) => p.id === currentPackageId) ?? null;
   const effectiveCap = userCapOverride ?? currentPackage?.userCap ?? null;
+  // No package and no override: the club app refuses new members until a package is chosen.
+  const noPlan = userCapOverride == null && !currentPackage;
 
   async function patch(body: Record<string, unknown>) {
     const res = await fetch(`/api/clubs/${clubId}`, {
@@ -100,6 +102,11 @@ export default function ClubPlanEditor({
         </p>
       )}
       {notice && <p className="rounded-xl bg-green-950 text-green-300 px-3 py-2 text-sm">{notice}</p>}
+      {noPlan && (
+        <p className="rounded-xl bg-amber-950 text-amber-300 px-3 py-2 text-sm">
+          This club has no package, so it can&apos;t add any new members until one is chosen below.
+        </p>
+      )}
 
       <div>
         <label htmlFor="club-package" className="block text-sm font-medium text-slate-300 mb-1">Package</label>
@@ -151,9 +158,12 @@ export default function ClubPlanEditor({
 
       <div className="flex items-center justify-between text-sm pt-2 border-t border-slate-700">
         <span className="text-slate-400">Effective limit</span>
-        <span className={`font-semibold ${effectiveCap != null && userCount > effectiveCap ? "text-red-400" : "text-slate-200"}`}>
-          {userCount} / {effectiveCap ?? "unlimited"} users
+        <span className={`font-semibold ${noPlan || (effectiveCap != null && userCount >= effectiveCap) ? "text-red-400" : "text-slate-200"}`}>
+          {noPlan
+            ? `${userCount} users · no package, new members blocked`
+            : `${userCount} / ${effectiveCap ?? "unlimited"} users`}
           {userCapOverride != null && <span className="text-blue-400 font-normal"> (override)</span>}
+          {effectiveCap != null && userCount >= effectiveCap && <span className="font-normal"> · full</span>}
         </span>
       </div>
     </div>
