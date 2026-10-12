@@ -67,6 +67,8 @@ export async function createClub(body: Record<string, unknown>): Promise<CreateR
           suburb: str(body.suburb),
           postcode: str(body.postcode),
           appVersion: version,
+          // The commercial package decides the member limit (see the club app's memberLimit.ts).
+          packageId: str(body.packageId),
           logoUrl: str(body.logoUrl),
           enabledModules,
           active: true,

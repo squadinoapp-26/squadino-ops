@@ -28,9 +28,15 @@ export async function provisionSignup(signup: SignupRequest, slug?: string): Pro
     ? new Date(Date.now() + signup.trialDays * 24 * 60 * 60 * 1000).toISOString()
     : undefined;
 
+  // The package row (with its member limit) the customer chose. A club with no package can't add
+  // members, so if staff haven't created a row for this key yet, the club page says so and staff
+  // pick one there.
+  const packageRow = await prisma.package.findUnique({ where: { key: signup.packageKey }, select: { id: true } });
+
   const result = await createClub({
     name: signup.clubName,
     slug,
+    packageId: packageRow?.id,
     sports: signup.sports,
     orgType: signup.orgType,
     // The package decides the plan. A Coach signup that arrived before the

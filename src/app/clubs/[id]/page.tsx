@@ -27,7 +27,8 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   const { id } = await params;
   const { created } = await searchParams;
 
-  const [club, packages] = await Promise.all([
+  // Removed members don't count against a club's member limit (same rule as the club app).
+  const [club, packages, memberCount] = await Promise.all([
     prisma.club.findUnique({
       where: { id },
       include: {
@@ -43,6 +44,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
       },
     }),
     prisma.package.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.user.count({ where: { clubId: id, status: { not: "REMOVED" } } }),
   ]);
 
   if (!club) notFound();
@@ -156,7 +158,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
           packages={packages.map((p) => ({ id: p.id, name: p.name, userCap: p.userCap, priceCents: p.priceCents, active: p.active }))}
           currentPackageId={club.packageId}
           userCapOverride={club.userCapOverride}
-          userCount={club._count.users}
+          userCount={memberCount}
           needsApproval={!canManagePackages(staff.role)}
         />
 
