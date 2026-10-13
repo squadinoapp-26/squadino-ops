@@ -5,9 +5,11 @@
 // invocations.
 
 import { prisma } from "@/lib/prisma";
+import { clientIp, maxAttemptsFor } from "@/lib/rateLimitRules";
+
+export { clientIp };
 
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
 
 export class RateLimitedError extends Error {
   retryAfterSeconds: number;
@@ -27,13 +29,14 @@ export class RateLimitedError extends Error {
 export async function assertNotRateLimited(identifiers: string[]): Promise<void> {
   const since = new Date(Date.now() - WINDOW_MS);
   for (const identifier of identifiers) {
+    const max = maxAttemptsFor(identifier);
     const attempts = await prisma.loginAttempt.findMany({
       where: { identifier, createdAt: { gte: since } },
       orderBy: { createdAt: "asc" },
-      take: MAX_ATTEMPTS,
+      take: max,
       select: { createdAt: true },
     });
-    if (attempts.length >= MAX_ATTEMPTS) {
+    if (attempts.length >= max) {
       const retryAfterMs = attempts[0].createdAt.getTime() + WINDOW_MS - Date.now();
       throw new RateLimitedError(Math.max(1, Math.ceil(retryAfterMs / 1000)));
     }
@@ -56,13 +59,4 @@ export function emailKey(email: string): string {
 
 export function ipKey(ip: string | null): string | null {
   return ip ? `ip:${ip}` : null;
-}
-
-// x-forwarded-for can be a comma-separated chain; the first entry is the original client.
-export function clientIp(headers: Headers): string | null {
-  const cf = headers.get("cf-connecting-ip");
-  if (cf) return cf.trim();
-  const xff = headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return null;
 }

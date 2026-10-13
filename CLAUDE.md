@@ -45,6 +45,11 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    (`decideExtraMembersInClubApp` to `/api/billing/actions`) to add them to the club's Stripe subscription and mark the request; ops then writes the Logs
    entry (`billing.extra_members_approved`/`_declined`). A decline always needs a reason; an admin gives one on approving too (moderator: optional).
    The table `extra_member_requests` comes from the club app's schema (mirrored here).
+   **Sign-in lockout rules** (`src/lib/rateLimitRules.ts`, copied from the club app's `rateLimitRules.ts` and `clientIp` in `src/lib/geoip.ts`; both apps share the `login_attempts`
+   table): 5 wrong tries per email and 30 per IP address in 15 minutes. The visitor's address comes only from `x-real-ip` then `x-forwarded-for` (Vercel overwrites both); NEVER
+   read `cf-connecting-ip`, which any visitor can forge because there is no Cloudflare in front (found and fixed 2026-10-13). Database time limits in `src/lib/prisma.ts`
+   (`DB_CONNECT_TIMEOUT_MS` 15 s, `DB_QUERY_TIMEOUT_MS` 30 s) follow the club app: no `statement_timeout` (Neon's pooler can refuse it), and no connect timeout under 15 s
+   (it also caps the wait for a pooled connection).
 5. **Sensitive changes need an admin.** Plan / user-limit changes, billing actions (account hold,
    resume, cancel) and package prices go through `submitChange` in
    `src/lib/changeRequests.server.ts`: SUPER_ADMIN and ADMIN make them directly, everyone else creates
