@@ -18,6 +18,7 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
   MODERATOR: "Moderator",
   CUSTOMER_CARE: "Customer care",
+  CLUB_ADMIN: "Club admin",
 };
 
 // The platform Logs: every change made in this console, newest first.

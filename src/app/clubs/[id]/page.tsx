@@ -14,6 +14,7 @@ import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import ClubPlanEditor from "./ClubPlanEditor";
+import { approvedExtraMembersFor } from "@/lib/extraMembers.server";
 import ClubUrlEditor from "./ClubUrlEditor";
 import ClubUsersList from "./ClubUsersList";
 import SignOutButton from "@/components/SignOutButton";
@@ -28,7 +29,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   const { created } = await searchParams;
 
   // Removed members don't count against a club's member limit (same rule as the club app).
-  const [club, packages, memberCount] = await Promise.all([
+  const [club, packages, memberCount, extraMembers] = await Promise.all([
     prisma.club.findUnique({
       where: { id },
       include: {
@@ -45,6 +46,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
     }),
     prisma.package.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.user.count({ where: { clubId: id, status: { not: "REMOVED" } } }),
+    approvedExtraMembersFor(id),
   ]);
 
   if (!club) notFound();
@@ -159,6 +161,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
           currentPackageId={club.packageId}
           userCapOverride={club.userCapOverride}
           userCount={memberCount}
+          extraMembers={extraMembers}
           needsApproval={!canManagePackages(staff.role)}
         />
 

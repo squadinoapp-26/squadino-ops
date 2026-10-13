@@ -37,9 +37,14 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    out; change both together), `hostClub.ts`, `subdomain.ts`, `sportCatalog.ts`,
    `restrictedWordsList.ts`.
    **Member limits:** a club's limit is its package's `userCap`, or its override (the club app's
-   `src/lib/memberLimit.ts` enforces it). A club with no package can't add members, so approving a
+   `src/lib/memberLimit.ts` enforces it), plus any extra members it has bought. A club with no package can't add members, so approving a
    signup must link the `Package` row with the signup's key (`provisionSignup` does), and the club page
    warns when a club has none. Removed members don't count.
+   **Extra member requests** (owner, 2026-10-13): a full club's admin asks for 25, 50 or 100 more (50 cents each, per month); the dashboard's "Extra member
+   requests" box lists them for SUPER_ADMIN, ADMIN and MODERATOR (`canDecideExtraMembers`; customer care only looks). Approving asks the club app
+   (`decideExtraMembersInClubApp` to `/api/billing/actions`) to add them to the club's Stripe subscription and mark the request; ops then writes the Logs
+   entry (`billing.extra_members_approved`/`_declined`). A decline always needs a reason; an admin gives one on approving too (moderator: optional).
+   The table `extra_member_requests` comes from the club app's schema (mirrored here).
 5. **Sensitive changes need an admin.** Plan / user-limit changes, billing actions (account hold,
    resume, cancel) and package prices go through `submitChange` in
    `src/lib/changeRequests.server.ts`: SUPER_ADMIN and ADMIN make them directly, everyone else creates

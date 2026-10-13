@@ -12,13 +12,15 @@ export interface PlanPackage {
 }
 
 export default function ClubPlanEditor({
-  clubId, packages, currentPackageId, userCapOverride, userCount, needsApproval = false,
+  clubId, packages, currentPackageId, userCapOverride, userCount, extraMembers = 0, needsApproval = false,
 }: {
   clubId: string;
   packages: PlanPackage[];
   currentPackageId: string | null;
   userCapOverride: number | null;
   userCount: number;
+  // Members the club has bought on top (approved extra-member requests); they add to the limit below.
+  extraMembers?: number;
   // Moderators and customer care ask; an admin approves.
   needsApproval?: boolean;
 }) {
@@ -33,7 +35,8 @@ export default function ClubPlanEditor({
   const [overrideError, setOverrideError] = useState("");
 
   const currentPackage = packages.find((p) => p.id === currentPackageId) ?? null;
-  const effectiveCap = userCapOverride ?? currentPackage?.userCap ?? null;
+  const baseCap = userCapOverride ?? currentPackage?.userCap ?? null;
+  const effectiveCap = baseCap != null ? baseCap + extraMembers : null;
   // No package and no override: the club app refuses new members until a package is chosen.
   const noPlan = userCapOverride == null && !currentPackage;
 
@@ -163,6 +166,7 @@ export default function ClubPlanEditor({
             ? `${userCount} users · no package, new members blocked`
             : `${userCount} / ${effectiveCap ?? "unlimited"} users`}
           {userCapOverride != null && <span className="text-blue-400 font-normal"> (override)</span>}
+          {extraMembers > 0 && baseCap != null && <span className="text-blue-400 font-normal">{` (${baseCap} + ${extraMembers} extra)`}</span>}
           {effectiveCap != null && userCount >= effectiveCap && <span className="font-normal"> · full</span>}
         </span>
       </div>

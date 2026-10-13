@@ -122,6 +122,12 @@ export function canReviewSignups(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR", "CUSTOMER_CARE"].includes(role);
 }
 
+// A club's request for extra members (25, 50 or 100): approving it adds them to the club's Stripe subscription.
+// Owner's rule (2026-10-13): admins and moderators decide these; customer care can only look.
+export function canDecideExtraMembers(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR"].includes(role);
+}
+
 // Correcting a pending signup's details, and reading the change Logs.
 export function canEditSignups(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
