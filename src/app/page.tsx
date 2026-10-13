@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges, canDecideExtraMembers } from "@/lib/auth";
 import AppConfigMenu from "@/components/AppConfigMenu";
 import { countPendingChanges } from "@/lib/changeRequests.server";
 import { canDeleteClub } from "@/lib/clubStatus";
@@ -12,6 +12,9 @@ import Link from "next/link";
 import SearchableList from "@/components/SearchableList";
 import RejectedClubsPanel, { type WaitingRejection, type RejectedSignup } from "@/components/RejectedClubsPanel";
 import PreApprovedClubsPanel, { type PreApprovedSignup } from "@/components/PreApprovedClubsPanel";
+import ExtraMemberRequestsPanel from "@/components/ExtraMemberRequestsPanel";
+import { listWaitingExtraMembers } from "@/lib/extraMembers.server";
+import { extraMembersMonthlyPrice } from "@/lib/extraMembers";
 import { listPendingSignupRequests } from "@/lib/signupReview.server";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
 
@@ -69,6 +72,9 @@ export default async function OpsDashboard() {
   const ownerByClub = new Map<string, string>();
   for (const a of admins) if (!ownerByClub.has(a.clubId)) ownerByClub.set(a.clubId, a.name);
   const searchText = (c: { id: string; name: string; slug: string }) => `${c.name} ${c.slug} ${c.slug}.squadino.com ${ownerByClub.get(c.id) ?? ""}`;
+
+  // Clubs that used up their member limit and asked for more (admins and moderators decide).
+  const extraMemberRequests = canDecideExtraMembers(staff.role) ? await listWaitingExtraMembers() : [];
 
   // The "Rejected clubs" box (admins only): rejections waiting for a decision, then signups already rejected.
   let rejectedPanel: { waiting: WaitingRejection[]; rejected: RejectedSignup[]; preApproved: PreApprovedSignup[] } | null = null;
@@ -202,6 +208,16 @@ export default async function OpsDashboard() {
               </div>
               <Link href="/approvals" className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-xl transition-colors whitespace-nowrap">Review →</Link>
             </div>
+          )}
+
+          {extraMemberRequests.length > 0 && (
+            <ExtraMemberRequestsPanel
+              isAdmin={canApproveChanges(staff.role)}
+              items={extraMemberRequests.map((r) => ({
+                id: r.id, clubId: r.clubId, clubName: r.clubName, members: r.members, price: extraMembersMonthlyPrice(r.members),
+                requestedByName: r.requestedByName, requestedByEmail: r.requestedByEmail, createdAt: r.createdAt.toISOString(), approvedSoFar: r.approvedSoFar,
+              }))}
+            />
           )}
 
           {rejectedPanel && rejectedPanel.preApproved.length > 0 && (

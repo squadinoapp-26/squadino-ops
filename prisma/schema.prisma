@@ -244,6 +244,7 @@ model Club {
   deactivation         ClubDeactivation?
   billing              ClubBilling?
   holdOffers           HoldOffer[]
+  extraMemberRequests  ExtraMemberRequest[]
   eventTypes           ClubEventType[]
   bookingSettings      BookingSettings?
   bookableSessions     BookableSession[]
@@ -694,6 +695,33 @@ model ClubBilling {
   holdExtendedAt      DateTime?
 
   @@map("club_billing")
+}
+
+// A club admin's request for a pack of extra members (25, 50 or 100) once the club is full. Nothing
+// changes until platform staff approve it in the ops app: approving adds the extra members to the club's
+// Stripe subscription (billed per member, per month) and from then on they count towards the club's member
+// limit (see src/lib/memberLimit.ts). Separate from clubs so code can deploy before the database update.
+model ExtraMemberRequest {
+  id               String    @id @default(cuid())
+  clubId           String
+  club             Club      @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  members          Int
+  // What the pack costs per month when it was asked for.
+  monthlyCents     Int
+  // PENDING | PROCESSING (Stripe is being updated) | APPROVED | DECLINED
+  status           String    @default("PENDING")
+  requestedByName  String
+  requestedByEmail String
+  decidedByName    String?
+  decidedByRole    String?
+  decisionNote     String?
+  decidedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([clubId, status])
+  @@index([status])
+  @@map("extra_member_requests")
 }
 
 // An offer emailed to a club's admins about an account hold. A hold is never started or ended for a
