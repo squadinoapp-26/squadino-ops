@@ -106,6 +106,9 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
 - Tests: `npm test` (vitest; pure logic only — no database tests)
 - Build check: `DATABASE_URL=postgresql://u:p@localhost:5432/x node node_modules/next/dist/bin/next build`
 - Commits go through a branch and PR; the owner merges.
+- **Dependencies:** never run `npm audit fix --force` (it would downgrade Prisma 7 to 6). The safe `npm audit fix` was run 2026-10-14 (Prisma, its client and the adapter are all 7.10.0, the same as the
+  club app's tools); the 4 high advisories left in production are inside the Prisma CLI's own tools and have no fix without that downgrade. `.github/dependabot.yml` asks for one weekly pull request with
+  minor and patch updates; this repo has NO automatic checks, so before merging one, look at its Vercel preview and run `npm test` and the type check.
 - **Node versions (test finding F10):** `.nvmrc` says 24 (the owner's PC). Ops runs the same Next 16 and Prisma 7 as the club app, so it needs Node 20.19+, 22.12+ or 24; its tests pass on Node 20.20 and 22.23 (checked 2026-10-14) as well as 24. There is no
   CI here, so run `npm test` and a build yourself. There is deliberately no `engines` field (Vercel would pick the newest Node on its own): the production Node version is the one in the Vercel project's settings.
 
