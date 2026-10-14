@@ -54,6 +54,9 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    the customer. Logs: `full.invoice_sent`, `full.invoice_cancelled`, `full.closed` (written here), `full.requested`, `full.paid` (written by the club app). When
    Stripe's `invoice.paid` arrives the club app turns the request into a normal pending signup (package `full`, trial 0) and the usual review follows;
    `provisionSignup` then sets the club's `userCapOverride` to the agreed number of members (the Full package row has no cap).
+   **Public routes** (login, forgot password, reset password) read their body with `readJson` (`src/lib/readJson.ts`, a copy of the club app's) so broken JSON or a bare `null` is a 400, not a 500. **Login timing:**
+   the login checks the password for every real account, switched on or off, and calls `burnVerifyTime` (`src/lib/password.ts`) when there is no account, so the answer takes the same time whichever it is (30 ms against 30 ms
+   measured 2026-10-14; before, a switched-off or unknown email answered in 15 ms against 31 ms for a live one).
    **Sign-in lockout rules** (`src/lib/rateLimitRules.ts`, copied from the club app's `rateLimitRules.ts` and `clientIp` in `src/lib/geoip.ts`; both apps share the `login_attempts`
    table): 5 wrong tries per email and 30 per IP address in 15 minutes. The visitor's address comes only from `x-real-ip` then `x-forwarded-for` (Vercel overwrites both); NEVER
    read `cf-connecting-ip`, which any visitor can forge because there is no Cloudflare in front (found and fixed 2026-10-13). Database time limits in `src/lib/prisma.ts`

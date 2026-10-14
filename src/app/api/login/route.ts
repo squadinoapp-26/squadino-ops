@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verify } from "@node-rs/argon2";
 import { prisma } from "@/lib/prisma";
 import { createPlatformSession } from "@/lib/auth";
+import { readJson } from "@/lib/readJson";
+import { burnVerifyTime, verifyPassword } from "@/lib/password";
 import { assertNotRateLimited, clearAttempts, clientIp, emailKey, ipKey, recordFailedAttempt, RateLimitedError } from "@/lib/rateLimit";
 
 export async function POST(req: NextRequest) {
-  const { email, password } = await req.json().catch(() => ({}));
+  const { email, password } = (await readJson<{ email?: unknown; password?: unknown }>(req)) ?? {};
   if (typeof email !== "string" || typeof password !== "string") {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
@@ -24,7 +25,10 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await prisma.platformUser.findUnique({ where: { email: emailLc } });
-  const valid = !!user && user.active && (await verify(user.passwordHash, password).catch(() => false));
+  // The password is checked for every real account, switched on or off, and burned against a dummy when there is none,
+  // so the answer takes the same time whichever it is and a visitor can't tell which staff emails exist.
+  const passwordOk = user ? await verifyPassword(user.passwordHash, password).catch(() => false) : (await burnVerifyTime(password), false);
+  const valid = !!user && user.active && passwordOk;
   if (!user || !valid) {
     await recordFailedAttempt(rateLimitKeys);
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
