@@ -128,6 +128,12 @@ export function canDecideExtraMembers(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR"].includes(role);
 }
 
+// The Full package (more than 1,000 members, priced per member by agreement): only admins and super admins set the
+// number of members and the price per member, send the invoice, cancel it or close a request. Owner's rule, 2026-10-14.
+export function canManageFullPackage(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
+}
+
 // Correcting a pending signup's details, and reading the change Logs.
 export function canEditSignups(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);

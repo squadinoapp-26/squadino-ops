@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges, canDecideExtraMembers } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges, canDecideExtraMembers, canManageFullPackage } from "@/lib/auth";
 import AppConfigMenu from "@/components/AppConfigMenu";
 import { countPendingChanges } from "@/lib/changeRequests.server";
 import { canDeleteClub } from "@/lib/clubStatus";
@@ -13,6 +13,8 @@ import SearchableList from "@/components/SearchableList";
 import RejectedClubsPanel, { type WaitingRejection, type RejectedSignup } from "@/components/RejectedClubsPanel";
 import PreApprovedClubsPanel, { type PreApprovedSignup } from "@/components/PreApprovedClubsPanel";
 import ExtraMemberRequestsPanel from "@/components/ExtraMemberRequestsPanel";
+import FullPackageRequestsPanel from "@/components/FullPackageRequestsPanel";
+import { listOpenFullRequests } from "@/lib/fullPackage.server";
 import { listWaitingExtraMembers } from "@/lib/extraMembers.server";
 import { extraMembersMonthlyPrice } from "@/lib/extraMembers";
 import { listPendingSignupRequests } from "@/lib/signupReview.server";
@@ -75,6 +77,8 @@ export default async function OpsDashboard() {
 
   // Clubs that used up their member limit and asked for more (admins and moderators decide).
   const extraMemberRequests = canDecideExtraMembers(staff.role) ? await listWaitingExtraMembers() : [];
+  // Requests for the Full package (more than 1,000 members, priced per member): admins and super admins only.
+  const fullRequests = canManageFullPackage(staff.role) ? await listOpenFullRequests() : [];
 
   // The "Rejected clubs" box (admins only): rejections waiting for a decision, then signups already rejected.
   let rejectedPanel: { waiting: WaitingRejection[]; rejected: RejectedSignup[]; preApproved: PreApprovedSignup[] } | null = null;
@@ -209,6 +213,8 @@ export default async function OpsDashboard() {
               <Link href="/approvals" className="bg-blue-600 hover:bg-blue-500 text-sm font-semibold px-4 py-2 rounded-xl transition-colors whitespace-nowrap">Review →</Link>
             </div>
           )}
+
+          {fullRequests.length > 0 && <FullPackageRequestsPanel items={fullRequests} />}
 
           {extraMemberRequests.length > 0 && (
             <ExtraMemberRequestsPanel
