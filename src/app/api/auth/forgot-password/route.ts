@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson } from "@/lib/readJson";
 import { createResetToken, RESET_TOKEN_TTL_MINUTES } from "@/lib/passwordReset.server";
 import { sendEmail, passwordResetEmail, mailConfigured } from "@/lib/email";
 
@@ -11,7 +12,7 @@ const GENERIC = {
 };
 
 export async function POST(req: NextRequest) {
-  const { email } = await req.json().catch(() => ({}));
+  const { email } = (await readJson<{ email?: unknown }>(req)) ?? {};
   const address = typeof email === "string" ? email.toLowerCase().trim() : "";
   if (!address) {
     return NextResponse.json({ error: "Enter your email address" }, { status: 400 });

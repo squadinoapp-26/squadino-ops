@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { readJson } from "@/lib/readJson";
 import { hashPassword } from "@/lib/password";
 import { findValidResetToken, consumeResetToken } from "@/lib/passwordReset.server";
 import { MIN_PASSWORD_LENGTH, passwordProblem } from "@/lib/passwordPolicy";
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { token, password } = await req.json().catch(() => ({}));
+  const { token, password } = (await readJson<{ token?: unknown; password?: unknown }>(req)) ?? {};
 
   const row = await findValidResetToken(typeof token === "string" ? token : "");
   if (!row) {
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const problem = passwordProblem(password);
-  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  if (problem || typeof password !== "string") return NextResponse.json({ error: problem ?? "Enter a new password" }, { status: 400 });
 
   const account = await prisma.platformUser.findFirst({ where: { email: row.email, active: true } });
   if (!account) {
