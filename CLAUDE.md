@@ -45,6 +45,15 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    (`decideExtraMembersInClubApp` to `/api/billing/actions`) to add them to the club's Stripe subscription and mark the request; ops then writes the Logs
    entry (`billing.extra_members_approved`/`_declined`). A decline always needs a reason; an admin gives one on approving too (moderator: optional).
    The table `extra_member_requests` comes from the club app's schema (mirrored here).
+   **Full package** (owner, 2026-10-14): for MORE than 1,000 members, priced per member by agreement, no free trial. A visitor asks on the website (monthly or
+   yearly); that is a `FullPackageRequest` row (club app schema, mirrored here). ONLY SUPER_ADMIN and ADMIN (`canManageFullPackage`) see the dashboard's "Full package
+   requests" box (`FullPackageRequestsPanel`) and act: enter the number of members (1,001 or more) and the price per member per month, see the live total
+   (`src/lib/fullPackage.ts`, a copy of the club app's money rules: monthly = members x price, yearly = 12 months less 5%), then **Send invoice**
+   (`POST /api/full-requests/[id]` to `runFullAction`, which asks the club app's `/api/billing/full` to create the Stripe customer, price, `send_invoice`
+   subscription (14 days to pay) and email the customer). Every action needs a written reason. **Cancel invoice and re-price** voids it; **Close request** does not email
+   the customer. Logs: `full.invoice_sent`, `full.invoice_cancelled`, `full.closed` (written here), `full.requested`, `full.paid` (written by the club app). When
+   Stripe's `invoice.paid` arrives the club app turns the request into a normal pending signup (package `full`, trial 0) and the usual review follows;
+   `provisionSignup` then sets the club's `userCapOverride` to the agreed number of members (the Full package row has no cap).
    **Sign-in lockout rules** (`src/lib/rateLimitRules.ts`, copied from the club app's `rateLimitRules.ts` and `clientIp` in `src/lib/geoip.ts`; both apps share the `login_attempts`
    table): 5 wrong tries per email and 30 per IP address in 15 minutes. The visitor's address comes only from `x-real-ip` then `x-forwarded-for` (Vercel overwrites both); NEVER
    read `cf-connecting-ip`, which any visitor can forge because there is no Cloudflare in front (found and fixed 2026-10-13). Database time limits in `src/lib/prisma.ts`

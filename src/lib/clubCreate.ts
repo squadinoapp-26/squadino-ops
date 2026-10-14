@@ -69,6 +69,8 @@ export async function createClub(body: Record<string, unknown>): Promise<CreateR
           appVersion: version,
           // The commercial package decides the member limit (see the club app's memberLimit.ts).
           packageId: str(body.packageId),
+          // A different member limit for this one club (the Full package's agreed number of members); it wins over the package's.
+          userCapOverride: typeof body.userCapOverride === "number" && Number.isInteger(body.userCapOverride) && body.userCapOverride > 0 ? body.userCapOverride : null,
           logoUrl: str(body.logoUrl),
           enabledModules,
           active: true,

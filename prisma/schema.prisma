@@ -724,6 +724,58 @@ model ExtraMemberRequest {
   @@map("extra_member_requests")
 }
 
+// Someone asked for the Full package (more than 1,000 members, priced per member by agreement). An admin
+// in the ops app sets the number of members and the price per member; the app works out what is due and
+// sends a Stripe invoice. When the invoice is paid, a normal SignupRequest is created for the usual review.
+// Separate from signup_requests so code can deploy before the database update. Rows are never deleted.
+model FullPackageRequest {
+  id                   String    @id @default(cuid())
+  // REQUESTED (waiting for a price) | PROCESSING (Stripe is being updated) | QUOTED (invoice sent, waiting for payment)
+  // | PAID (a SignupRequest was created) | CLOSED (staff turned it down)
+  status               String    @default("REQUESTED")
+  interval             String
+  clubName             String
+  registeredName       String?
+  orgType              String
+  sports               String[]
+  street               String?
+  suburb               String?
+  postcode             String?
+  requestedUrl         String?
+  contactName          String
+  contactEmail         String
+  contactPhone         String?
+  estimatedUsers       Int
+  // The agreed deal. Prices are in cents; the per-member price is per month, and yearly is 12 months less 5%.
+  quotedUsers          Int?
+  perUserCents         Int?
+  periodCents          Int?
+  quoteNote            String?
+  quotedByName         String?
+  quotedByRole         String?
+  quotedAt             DateTime?
+  // Goes up each time an invoice is cancelled for re-pricing, so a new attempt never reuses an old Stripe request key.
+  quoteRound           Int       @default(1)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripeInvoiceId      String?
+  invoiceUrl           String?
+  invoicePdfUrl        String?
+  invoiceDueAt         DateTime?
+  paidAt               DateTime?
+  signupRequestId      String?
+  closedByName         String?
+  closedByRole         String?
+  closeReason          String?
+  closedAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([status])
+  @@index([stripeSubscriptionId])
+  @@map("full_package_requests")
+}
+
 // An offer emailed to a club's admins about an account hold. A hold is never started or ended for a
 // customer: they answer from a private link (only a fingerprint of it is stored) and nothing changes
 // until they do. START = "put the club on hold?"; END = "the hold is ending: what next?".

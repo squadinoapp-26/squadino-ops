@@ -21,7 +21,8 @@ export const SIGNUP_PACKAGES: SignupPackage[] = [
   { key: "starter", name: "Starter", appVersion: "BASIC", trialDays: 14, paid: true, fixedInterval: false },
   { key: "growth", name: "Growth", appVersion: "BASIC", trialDays: 14, paid: true, fixedInterval: false },
   { key: "scale", name: "Scale", appVersion: "PRO", trialDays: 14, paid: true, fixedInterval: false },
-  { key: "full", name: "Full", appVersion: "PRO", trialDays: 14, paid: true, fixedInterval: false },
+  // Full is for more than 1,000 members, priced per member by agreement and invoiced: no free trial.
+  { key: "full", name: "Full", appVersion: "PRO", trialDays: 0, paid: true, fixedInterval: false },
   { key: "coach", name: "Coach", appVersion: "COACH", trialDays: 14, paid: true, fixedInterval: false },
 ];
 

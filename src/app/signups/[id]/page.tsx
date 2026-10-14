@@ -186,7 +186,9 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
                 <p className="mt-1">
                   {dummy
                     ? "This was a dummy (test mode) payment, so there's nothing to find in Stripe. Only approve it if you're expecting this test signup."
-                    : `Find customer ${signup.stripeCustomerId} in the Stripe dashboard and check the ${signup.packageKey} subscription exists with a card saved and its ${signup.trialDays}-day trial started.`}
+                    : signup.packageKey === "full"
+                      ? `The Full package is paid by invoice. Find customer ${signup.stripeCustomerId} in the Stripe dashboard and check the invoice shows as paid.`
+                      : `Find customer ${signup.stripeCustomerId} in the Stripe dashboard and check the ${signup.packageKey} subscription exists with a card saved and its ${signup.trialDays}-day trial started.`}
                 </p>
               </div>
             )}

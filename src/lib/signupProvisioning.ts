@@ -4,6 +4,7 @@ import { createClub } from "@/lib/clubCreate";
 import { createGeneralChatGroup } from "@/lib/clubProvisioning";
 import { hashPassword } from "@/lib/password";
 import { getSignupPackage } from "@/lib/signupPackages";
+import { isMissingTable } from "@/lib/prismaErrors";
 import type { SignupRequest } from "@/generated/prisma/client";
 
 type ProvisionResult =
@@ -33,10 +34,24 @@ export async function provisionSignup(signup: SignupRequest, slug?: string): Pro
   // pick one there.
   const packageRow = await prisma.package.findUnique({ where: { key: signup.packageKey }, select: { id: true } });
 
+  // The Full package is priced per member for an agreed number of members: that number is the club's member limit.
+  // (The package itself has no cap, so without this the club would be unlimited.)
+  let userCapOverride: number | undefined;
+  if (signup.packageKey === "full") {
+    const deal = await prisma.fullPackageRequest
+      .findFirst({ where: { signupRequestId: signup.id }, select: { quotedUsers: true } })
+      .catch((e) => {
+        if (isMissingTable(e)) return null;
+        throw e;
+      });
+    userCapOverride = deal?.quotedUsers ?? undefined;
+  }
+
   const result = await createClub({
     name: signup.clubName,
     slug,
     packageId: packageRow?.id,
+    userCapOverride,
     sports: signup.sports,
     orgType: signup.orgType,
     // The package decides the plan. A Coach signup that arrived before the
