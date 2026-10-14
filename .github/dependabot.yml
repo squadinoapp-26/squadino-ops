@@ -1,0 +1,23 @@
+# Weekly dependency update pull requests, so security fixes arrive as small regular jobs instead of piling up
+# (see the club repo's 2026-10-13 test report, finding F8). One pull request a week carries all minor and patch
+# updates. Major versions are never proposed: they can change how the console behaves (Prisma, Next.js, React,
+# ESLint), so they are a decision, not a routine. This repo has no automatic checks of its own yet, so look at the
+# Vercel preview for each pull request and run `npm test` before merging one. Security fixes are raised separately by
+# GitHub itself once "Dependabot security updates" is switched on in the repository's settings (Settings > Code security).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Australia/Melbourne
+    open-pull-requests-limit: 3
+    groups:
+      ops-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels: [dependencies]
