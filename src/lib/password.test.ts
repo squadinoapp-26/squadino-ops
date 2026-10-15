@@ -27,6 +27,9 @@ describe("burnVerifyTime", () => {
     }
     expect(median(burn)).toBeGreaterThan(median(check) * 0.5);
     expect(median(burn)).toBeLessThan(median(check) * 2);
-    expect(median(burn)).toBeGreaterThan(8);
+    // That is also what proves it is real work and not a shortcut: the real check is argon2, so something within
+    // a factor of two of it is argon2 too. There is deliberately NO fixed number of milliseconds here: a check
+    // takes about 25 ms on the owner's PC but only about 4 ms on a fast machine, and an earlier version that
+    // demanded more than 8 ms failed there at random (found in the club app's CI on 2026-10-14).
   });
 });
