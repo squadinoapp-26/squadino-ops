@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
 import { requirePlatformSessionOrRedirect, canManageClients } from "@/lib/auth";
-import { CLUB_ACCOUNT_FILTERS, filterClubAccounts, isClubAccountFilter } from "@/lib/clubAccounts";
+import { CLUB_ACCOUNT_FILTERS, clubPlanLabels, filterClubAccounts, isClubAccountFilter } from "@/lib/clubAccounts";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,8 @@ export default async function ClubAccountsPage({
   const filter = isClubAccountFilter(filterParam) ? filterParam : "all";
   const allClubs = await prisma.club.findMany({
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { users: true } } },
+    // The package's name only: its member limit and price are on the club's own page.
+    include: { _count: { select: { users: true } }, package: { select: { name: true } } },
   });
   const clubs = filterClubAccounts(allClubs, q, filter);
   const href = (f: string) => `/clubs?${new URLSearchParams({ ...(q && { q }), ...(f !== "all" && { filter: f }) })}`;
@@ -55,7 +56,9 @@ export default async function ClubAccountsPage({
         <p className="text-xs text-slate-500">{`${clubs.length} of ${allClubs.length} clubs`}</p>
 
         <div className="space-y-3">
-          {clubs.map(club => (
+          {clubs.map(club => {
+            const plan = clubPlanLabels(club);
+            return (
             <div key={club.id} className="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex items-center gap-4">
               {club.logoUrl
                 // eslint-disable-next-line @next/next/no-img-element
@@ -74,6 +77,11 @@ export default async function ClubAccountsPage({
                   {club.subdomainReady
                     ? <span className="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full">Subdomain live</span>
                     : <span className="text-xs bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full">Subdomain not ready</span>}
+                  <span title={plan.packageHint || undefined} className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    plan.packageTone === "ok" ? "bg-indigo-900 text-indigo-300" :
+                    plan.packageTone === "warn" ? "bg-amber-900 text-amber-300" : "bg-slate-700 text-slate-400"
+                  }`}>{plan.packageLabel}</span>
+                  {plan.overrideLabel && <span className="text-xs bg-cyan-900 text-cyan-300 px-2 py-0.5 rounded-full font-medium">{plan.overrideLabel}</span>}
                 </div>
                 <p className="text-sm text-slate-500">
                   {`${club.sport} · ${club._count.users} users · `}
@@ -89,7 +97,8 @@ export default async function ClubAccountsPage({
                 Manage →
               </Link>
             </div>
-          ))}
+            );
+          })}
           {clubs.length === 0 && (
             <div className="text-center py-16 text-slate-500">
               <p className="text-4xl mb-3">🏟️</p>
