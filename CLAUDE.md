@@ -15,7 +15,7 @@ is not a developer: plain words, ask before product-behaviour decisions.
 Signups (review, edit, approve, reject with a reason an admin must confirm) · Set up subdomain (Vercel) · Send setup email ·
 Club status (deactivate / reactivate / delete after 12 months) · New Client (by hand) ·
 Sports list · Restricted words · Logs (searchable by club or staff name, username, email, web address, task, date and reason: `listAuditLogs` in `src/lib/auditLog.server.ts`) · Manage users (staff) · Packages & prices ·
-Manage accounts (searchable club list) · dashboard alerts · each club's Stripe billing status
+Manage accounts (searchable club list; each club's card shows its package (`Package: Growth`) and its user limit override when it has one (`User limit override: 1,250`), and a club with NO package and NO override is flagged amber "No package (can't add members)" because the club app refuses new members for it; wording in `clubPlanLabels`, `src/lib/clubAccounts.ts`) · dashboard alerts · each club's Stripe billing status
 (plan, cancelling, payment failed) — written by the club app's `/api/billing/sync` into the
 `club_billing` table, read-only here. Roles: SUPER_ADMIN, ADMIN,
 MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in `roles.test.ts`).
