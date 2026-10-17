@@ -122,7 +122,7 @@ export function welcomeEmail(
       "",
       "STEP 1: Set your password",
       setPasswordUrl,
-      `The link works once and expires in ${ttlMinutes} minutes — if it expires, use "Forgot password" on the sign-in page.`,
+      `The link works once and expires in ${lifetimeWords(ttlMinutes)} — if it expires, use "Forgot password" on the sign-in page.`,
       "",
       "STEP 2: Sign in",
       signIn,
@@ -147,7 +147,7 @@ export function welcomeEmail(
           </a>
         </p>
         <p style="color:#64748b;font-size:13px;line-height:1.5;margin:0">
-          The link works once and expires in ${ttlMinutes} minutes — if it expires, use "Forgot password" on the sign-in page.
+          The link works once and expires in ${lifetimeWords(ttlMinutes)} — if it expires, use "Forgot password" on the sign-in page.
         </p>
 
         <p style="margin:24px 0 4px;font-weight:600">Step 2: Sign in</p>
@@ -196,6 +196,13 @@ function setupTips(coach: boolean, inviteUrl?: string): { title: string; text: s
     tip("Post a welcome on the Wall", "Say hello, so new members land on something friendly."),
     tip("Invite your members", joinText("members", extra), joinHtml("members", extra)),
   ];
+}
+
+// "1440" -> "24 hours", "60" -> "1 hour", "45" -> "45 minutes": what the owner reads, not the number we store.
+function lifetimeWords(minutes: number): string {
+  if (minutes % 60 !== 0) return `${minutes} minutes`;
+  const hours = minutes / 60;
+  return hours === 1 ? "1 hour" : `${hours} hours`;
 }
 
 // Club names on this path come straight from a self-serve signup form, so

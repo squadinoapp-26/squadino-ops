@@ -20,10 +20,17 @@ describe("welcomeEmail", () => {
   });
 
   it("gives the set-password link and how long it works", () => {
-    const { text, html } = welcomeEmail("https://x.test/reset-password?token=t", "Otters", 60, links);
+    const { text, html } = welcomeEmail("https://x.test/reset-password?token=t", "Otters", 24 * 60, links);
     expect(text).toContain("https://x.test/reset-password?token=t");
-    expect(text).toContain("expires in 60 minutes");
+    expect(text).toContain("expires in 24 hours");
+    expect(html).toContain("expires in 24 hours");
     expect(html).toContain('href="https://x.test/reset-password?token=t"');
+  });
+
+  it("writes the link's lifetime in words an owner reads, not minutes", () => {
+    expect(welcomeEmail("https://x.test/r", "Otters", 60).text).toContain("expires in 1 hour ");
+    expect(welcomeEmail("https://x.test/r", "Otters", 120).text).toContain("expires in 2 hours ");
+    expect(welcomeEmail("https://x.test/r", "Otters", 45).text).toContain("expires in 45 minutes ");
   });
 
   it("says where to sign in and with which email", () => {
