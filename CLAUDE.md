@@ -37,7 +37,7 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    out; change both together), `hostClub.ts`, `subdomain.ts`, `sportCatalog.ts`,
    `restrictedWordsList.ts`, and `welcomeEmail` in `src/lib/email.ts` (the setup email: set the password, how to sign in, quick tips for setting the club up; the club app's
    `src/lib/email.ts` holds an IDENTICAL copy and each repo has the same `welcomeEmail.test.ts`; `sendOwnerSetupEmails` passes the owner's email and, for a Coach-plan club, `coach: true` so the tips fit a
-   coaching business). It is the "second email" that the club app's "We've received your signup" email promises the customer (owner, 2026-10-17).
+   coaching business). It is the "second email" that the club app's "We've received your signup" email promises the customer (owner, 2026-10-17). Its set-password link is valid for 24 hours (`SETUP_LINK_TTL_MINUTES` in `src/lib/passwordReset.server.ts`, an identical copy of the club app's file); only "Forgot password" keeps 60 minutes.
    **Member limits:** a club's limit is its package's `userCap`, or its override (the club app's
    `src/lib/memberLimit.ts` enforces it), plus any extra members it has bought. A club with no package can't add members, so approving a
    signup must link the `Package` row with the signup's key (`provisionSignup` does), and the club page

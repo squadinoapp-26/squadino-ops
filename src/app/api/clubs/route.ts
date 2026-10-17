@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlatformSession, canManageClients } from "@/lib/auth";
 import { createClub, createGeneralChatGroup, isValidSlug } from "@/lib/clubProvisioning";
 import { hashPassword } from "@/lib/password";
-import { createResetToken, RESET_TOKEN_TTL_MINUTES } from "@/lib/passwordReset.server";
+import { createResetToken, SETUP_LINK_TTL_MINUTES } from "@/lib/passwordReset.server";
 import { sendEmail, welcomeEmail, squadinoAppUrl } from "@/lib/email";
 import { randomBytes } from "crypto";
 import { recordAudit } from "@/lib/auditLog.server";
@@ -72,9 +72,9 @@ export async function POST(req: NextRequest) {
     note: `Created by hand (New Client) · code ${club.code} · ${club.slug}.squadino.com · owner ${ownerEmail}`,
   });
 
-  const token = await createResetToken(ownerEmail);
+  const token = await createResetToken(ownerEmail, SETUP_LINK_TTL_MINUTES);
   const setPasswordUrl = `${squadinoAppUrl()}/reset-password?token=${token}`;
-  const emailMsg = welcomeEmail(setPasswordUrl, club.name, RESET_TOKEN_TTL_MINUTES);
+  const emailMsg = welcomeEmail(setPasswordUrl, club.name, SETUP_LINK_TTL_MINUTES);
   const sent = await sendEmail({ ...emailMsg, to: ownerEmail });
 
   return NextResponse.json({

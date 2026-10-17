@@ -7,6 +7,11 @@ const TTL_MINUTES = 60;
 
 export const RESET_TOKEN_TTL_MINUTES = TTL_MINUTES;
 
+// The "set your password" link in the welcome email lasts a day (owner, 2026-10-17): a new owner often doesn't open
+// that email until later. It is still single use and the old ones are voided when a new one is sent. Only
+// "Forgot password" keeps the short lifetime above.
+export const SETUP_LINK_TTL_MINUTES = 24 * 60;
+
 // The raw token goes in the emailed link; only this hash is stored.
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -19,7 +24,7 @@ function hashToken(token: string): string {
  * forwarded or resent link can't be replayed after a newer one is requested.
  * Returns the raw token — the only time it exists in plaintext.
  */
-export async function createResetToken(email: string): Promise<string> {
+export async function createResetToken(email: string, ttlMinutes: number = TTL_MINUTES): Promise<string> {
   await prisma.passwordResetToken.updateMany({
     where: { email, usedAt: null },
     data: { usedAt: new Date() },
@@ -30,7 +35,7 @@ export async function createResetToken(email: string): Promise<string> {
     data: {
       email,
       tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + TTL_MINUTES * 60 * 1000),
+      expiresAt: new Date(Date.now() + ttlMinutes * 60 * 1000),
     },
   });
   return token;

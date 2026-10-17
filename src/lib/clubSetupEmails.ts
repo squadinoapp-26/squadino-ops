@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail, welcomeEmail, subdomainLiveEmail, squadinoAppUrl } from "@/lib/email";
-import { createResetToken, RESET_TOKEN_TTL_MINUTES } from "@/lib/passwordReset.server";
+import { createResetToken, SETUP_LINK_TTL_MINUTES } from "@/lib/passwordReset.server";
 import { clubSubdomainUrl } from "@/lib/hostClub";
 
 // `appVersion` is only used to give a Coach-plan owner the coach version of the getting-started tips.
@@ -30,8 +30,8 @@ export async function sendOwnerSetupEmails(club: ClubRef): Promise<string[]> {
   });
   const base = clubBaseUrl(club);
   for (const { email } of owners) {
-    const token = await createResetToken(email);
-    const msg = welcomeEmail(`${base}/reset-password?token=${token}`, club.name, RESET_TOKEN_TTL_MINUTES, {
+    const token = await createResetToken(email, SETUP_LINK_TTL_MINUTES);
+    const msg = welcomeEmail(`${base}/reset-password?token=${token}`, club.name, SETUP_LINK_TTL_MINUTES, {
       signInUrl: `${base}/login`,
       inviteUrl: `${base}/register?code=${encodeURIComponent(club.code)}`,
       email,
