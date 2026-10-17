@@ -16,7 +16,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const club = await prisma.club.findUnique({
     where: { id },
-    select: { id: true, name: true, code: true, slug: true, subdomainReady: true, active: true },
+    select: { id: true, name: true, code: true, slug: true, subdomainReady: true, active: true, appVersion: true },
   });
   if (!club) return NextResponse.json({ error: "Club not found" }, { status: 404 });
   if (!club.active) return NextResponse.json({ error: "This club is inactive — reactivate it first." }, { status: 400 });

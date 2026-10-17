@@ -3,7 +3,8 @@ import { sendEmail, welcomeEmail, subdomainLiveEmail, squadinoAppUrl } from "@/l
 import { createResetToken, RESET_TOKEN_TTL_MINUTES } from "@/lib/passwordReset.server";
 import { clubSubdomainUrl } from "@/lib/hostClub";
 
-type ClubRef = { id: string; name: string; code: string; slug: string; subdomainReady: boolean };
+// `appVersion` is only used to give a Coach-plan owner the coach version of the getting-started tips.
+type ClubRef = { id: string; name: string; code: string; slug: string; subdomainReady: boolean; appVersion?: string };
 
 // A club's admins: the owner created at approval is an ADMIN.
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"] as const;
@@ -18,7 +19,9 @@ export function clubBaseUrl(club: Pick<ClubRef, "slug" | "subdomainReady">): str
  * active admin of the club who has never signed in. For a newly approved
  * signup that's exactly the owner; anyone who has already signed in has a
  * password and doesn't need one. Links point at the club's subdomain once
- * it's live. Returns who it went to.
+ * it's live. The email also says how to sign in and gives a few tips for
+ * setting the club up (see welcomeEmail). This is the "second email" the
+ * club app's signup-received email promises. Returns who it went to.
  */
 export async function sendOwnerSetupEmails(club: ClubRef): Promise<string[]> {
   const owners = await prisma.user.findMany({
@@ -31,6 +34,8 @@ export async function sendOwnerSetupEmails(club: ClubRef): Promise<string[]> {
     const msg = welcomeEmail(`${base}/reset-password?token=${token}`, club.name, RESET_TOKEN_TTL_MINUTES, {
       signInUrl: `${base}/login`,
       inviteUrl: `${base}/register?code=${encodeURIComponent(club.code)}`,
+      email,
+      coach: club.appVersion === "COACH",
     });
     await sendEmail({ ...msg, to: email });
   }
