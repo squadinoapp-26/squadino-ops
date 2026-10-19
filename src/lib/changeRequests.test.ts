@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, parseSignupPreApprove, parseSignupReject,
-  decisionNoteRequired, requestStatusLabel, REASON_MAX,
+  parseSignupEditRequest, signupEditChanges, decisionNoteRequired, requestStatusLabel, REASON_MAX,
 } from "./changeRequests";
+import type { SignupEditData } from "./signupEdit";
 
 describe("isChangeType / billingActionFor", () => {
   it("knows the request types and which ones are billing actions", () => {
@@ -147,10 +148,106 @@ describe("pre-approving a signup (SIGNUP_PREAPPROVE)", () => {
   });
 });
 
+describe("correcting a signup's details (SIGNUP_EDIT)", () => {
+  // A signup as it is in the database: the customer typed their email wrong.
+  const CURRENT: SignupEditData = {
+    packageKey: "growth", interval: "monthly", trialDays: 14, appVersion: "BASIC",
+    clubName: "Berwick Lakers", registeredName: null, orgType: "Club", sports: ["Basketball"],
+    street: "12 Main Street", suburb: "Berwick", postcode: "3805", requestedUrl: null,
+    estimatedUsers: 200, contactName: "Sam Smith", contactEmail: "sam@exmaple.com", contactPhone: null,
+  };
+  const CATALOG = ["Basketball", "Netball"];
+  // What the edit form sends: every field as a string, plus the reason.
+  const form = (over: Record<string, unknown> = {}) => ({
+    packageKey: "growth", interval: "monthly", trialDays: "14", clubName: "Berwick Lakers", registeredName: "", orgType: "Club",
+    sports: ["Basketball"], street: "12 Main Street", suburb: "Berwick", postcode: "3805", requestedUrl: "", estimatedUsers: "200",
+    contactName: "Sam Smith", contactEmail: "sam@example.com", contactPhone: "", reason: "Customer typed the email wrong", ...over,
+  });
+
+  it("is a request type that is not a billing action, and an admin always gives a reason when deciding it", () => {
+    expect(isChangeType("SIGNUP_EDIT")).toBe(true);
+    expect(billingActionFor("SIGNUP_EDIT")).toBeNull();
+    expect(decisionNoteRequired("SIGNUP_EDIT")).toBe(true);
+  });
+
+  it("keeps the new details, the details as they were, and the reason", () => {
+    const r = parseSignupEditRequest("s1", form(), CURRENT, CATALOG);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.reason).toBe("Customer typed the email wrong");
+    expect(r.payload.signupId).toBe("s1");
+    expect(r.payload.before).toEqual(CURRENT);
+    expect(r.payload.data.contactEmail).toBe("sam@example.com");
+    expect(r.payload.data.clubName).toBe("Berwick Lakers");
+    expect(r.changes.map((c) => [c.field, c.from, c.to])).toEqual([["contactEmail", "sam@exmaple.com", "sam@example.com"]]);
+  });
+
+  it("copies the old details, so a later change to the signup can't alter the proposal's 'before'", () => {
+    const current = { ...CURRENT, sports: ["Basketball"] };
+    const r = parseSignupEditRequest("s1", form(), current, CATALOG);
+    if (!r.ok) throw new Error("expected ok");
+    current.sports.push("Netball");
+    expect(r.payload.before.sports).toEqual(["Basketball"]);
+  });
+
+  it("needs a written reason whenever something changes, and caps it", () => {
+    expect(parseSignupEditRequest("s1", form({ reason: "" }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", form({ reason: "   " }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", form({ reason: undefined }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", form({ reason: 42 }), CURRENT, CATALOG).ok).toBe(false);
+    const long = parseSignupEditRequest("s1", form({ reason: "x".repeat(REASON_MAX + 50) }), CURRENT, CATALOG);
+    expect(long.ok && long.reason).toHaveLength(REASON_MAX);
+  });
+
+  it("says nothing changed (no reason needed) when the form matches the signup", () => {
+    const r = parseSignupEditRequest("s1", form({ contactEmail: "sam@exmaple.com", reason: "" }), CURRENT, CATALOG);
+    expect(r.ok && r.changes).toEqual([]);
+  });
+
+  it("applies the same field rules as the old edit form", () => {
+    expect(parseSignupEditRequest("s1", form({ contactEmail: "not an email" }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", form({ clubName: " " }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", form({ sports: [] }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", form({ sports: ["Quidditch"] }), CURRENT, CATALOG).ok).toBe(false);
+    expect(parseSignupEditRequest("s1", null, CURRENT, CATALOG).ok).toBe(false);
+  });
+
+  it("follows the package: a different package changes the app version too", () => {
+    const r = parseSignupEditRequest("s1", form({ packageKey: "scale", contactEmail: "sam@exmaple.com" }), CURRENT, CATALOG);
+    expect(r.ok && r.payload.data.appVersion).toBe("PRO");
+    expect(r.ok && r.changes.map((c) => c.field)).toEqual(["packageKey", "appVersion"]);
+  });
+
+  it("lists what a stored request would change, and copes with a payload of the wrong shape", () => {
+    const r = parseSignupEditRequest("s1", form({ suburb: "Narre Warren" }), CURRENT, CATALOG);
+    if (!r.ok) throw new Error("expected ok");
+    expect(signupEditChanges(r.payload).map((c) => c.field)).toEqual(["suburb", "contactEmail"]);
+    expect(signupEditChanges(null)).toEqual([]);
+    expect(signupEditChanges({ signupId: "s1" })).toEqual([]);
+    expect(signupEditChanges({ data: "x", before: "y" })).toEqual([]);
+  });
+
+  it("describes the request for the Approvals list with old and new values", () => {
+    const r = parseSignupEditRequest("s1", form(), CURRENT, CATALOG);
+    if (!r.ok) throw new Error("expected ok");
+    const text = describeChange("SIGNUP_EDIT", r.payload);
+    expect(text).toContain("Contact email: sam@exmaple.com → sam@example.com");
+    expect(text).toContain("decline it and nothing changes");
+    expect(describeChange("SIGNUP_EDIT", {})).toContain("Correct this new signup's details");
+  });
+
+  it("words the outcome as corrected / declined", () => {
+    expect(requestStatusLabel("SIGNUP_EDIT", "PENDING")).toBe("Waiting for approval");
+    expect(requestStatusLabel("SIGNUP_EDIT", "APPROVED")).toBe("Approved: details corrected");
+    expect(requestStatusLabel("SIGNUP_EDIT", "REJECTED")).toBe("Declined: details unchanged");
+  });
+});
+
 describe("decisionNoteRequired", () => {
-  it("makes an admin give a reason on both kinds of signup request, and on no other change", () => {
+  it("makes an admin give a reason on every kind of signup request, and on no other change", () => {
     expect(decisionNoteRequired("SIGNUP_REJECT")).toBe(true);
     expect(decisionNoteRequired("SIGNUP_PREAPPROVE")).toBe(true);
+    expect(decisionNoteRequired("SIGNUP_EDIT")).toBe(true);
     expect(decisionNoteRequired("PLAN_CHANGE")).toBe(false);
     expect(decisionNoteRequired("HOLD_START")).toBe(false);
   });

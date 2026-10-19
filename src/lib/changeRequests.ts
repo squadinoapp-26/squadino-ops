@@ -2,6 +2,9 @@
 // customer care send a request that an admin approves or rejects (see /approvals). Pure, so the
 // rules are unit-tested without a database.
 
+import { diffFields, formatAuditValue, type AuditChange } from "@/lib/auditLog";
+import { parseSignupEdit, signupEditSnapshot, SIGNUP_EDIT_FIELDS, type SignupEditData } from "@/lib/signupEdit";
+
 export const CHANGE_TYPES = {
   PLAN_CHANGE: "Change plan or user limit",
   HOLD_START: "Offer account hold to the customer",
@@ -11,6 +14,7 @@ export const CHANGE_TYPES = {
   PACKAGE_EDIT: "Edit package price or limit",
   SIGNUP_REJECT: "Reject a new signup",
   SIGNUP_PREAPPROVE: "Pre-approve a new signup",
+  SIGNUP_EDIT: "Correct a new signup's details",
 } as const;
 
 export type ChangeType = keyof typeof CHANGE_TYPES;
@@ -66,9 +70,17 @@ export interface SignupPreApprovePayload {
   notes: string | null;
 }
 
-// Both signup requests are decided by an admin, who always gives a written reason, approving or not.
+// A correction to a customer's typing mistakes: the new details, plus the details as they were when it was asked for, so the
+// approver sees old -> new and an approval can tell if the signup changed in between.
+export interface SignupEditPayload {
+  signupId: string;
+  data: SignupEditData;
+  before: SignupEditData;
+}
+
+// All three signup requests are decided by an admin, who always gives a written reason, approving or not.
 export function decisionNoteRequired(type: string): boolean {
-  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE";
+  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT";
 }
 
 type Parsed<T> = { ok: true; payload: T } | { ok: false; error: string };
@@ -84,6 +96,33 @@ export function parseSignupPreApprove(signupId: string, body: unknown, opts: { n
   }
   const slug = typeof b.slug === "string" && b.slug.trim() ? b.slug.trim() : undefined;
   return { ok: true, payload: { signupId, ...(slug ? { slug } : {}), paymentChecked: b.paymentChecked === true, notes: cleanReason(b.notes) } };
+}
+
+/**
+ * A correction to a pending signup's details (the customer made a mistake typing them in). Checked with the same rules as before
+ * (`parseSignupEdit`); a written reason is required whenever something really changes, for an admin's own correction and a request
+ * alike. `changes` is empty when nothing differs, and the caller then has nothing to save or send.
+ */
+export function parseSignupEditRequest(
+  signupId: string,
+  body: unknown,
+  current: SignupEditData,
+  catalogSports: string[],
+): { ok: true; payload: SignupEditPayload; reason: string | null; changes: AuditChange[] } | { ok: false; error: string } {
+  const parsed = parseSignupEdit(body, current, catalogSports);
+  if (!parsed.ok) return parsed;
+  const before = signupEditSnapshot(current);
+  const changes = diffFields(before, parsed.data, SIGNUP_EDIT_FIELDS);
+  const reason = cleanReason((body && typeof body === "object" ? (body as Record<string, unknown>).reason : undefined));
+  if (changes.length > 0 && !reason) return { ok: false, error: "Say what was wrong with the details, so the correction is recorded with a reason." };
+  return { ok: true, payload: { signupId, data: parsed.data, before }, reason, changes };
+}
+
+/** What a correction would change, old to new, from a stored request (empty if the stored payload isn't the right shape). */
+export function signupEditChanges(payload: unknown): AuditChange[] {
+  const p = (payload && typeof payload === "object" ? payload : {}) as { data?: unknown; before?: unknown };
+  if (!p.data || typeof p.data !== "object" || !p.before || typeof p.before !== "object") return [];
+  return diffFields(p.before, p.data, SIGNUP_EDIT_FIELDS);
 }
 
 /** Rejecting a signup always needs a written reason, so an admin can judge it. */
@@ -167,6 +206,11 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       return "Cancel the subscription at the end of the period already paid for";
     case "SIGNUP_REJECT":
       return "Reject this new signup. Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review";
+    case "SIGNUP_EDIT": {
+      const changes = signupEditChanges(payload);
+      const list = changes.map((c) => `${c.label}: ${formatAuditValue(c.from)} → ${formatAuditValue(c.to)}`).join("; ");
+      return `${list ? `Correct this new signup's details (${list}). ` : "Correct this new signup's details. "}Approve it and the signup is changed; decline it and nothing changes`;
+    }
     case "SIGNUP_PREAPPROVE":
       return `Create the club for this new signup${typeof p.slug === "string" && p.slug ? ` at ${p.slug}.squadino.com` : ""}. Approve it and the club is created; send it back and the signup returns to the signups waiting for review`;
   }
@@ -188,6 +232,10 @@ export function requestStatusLabel(type: string, status: string): string {
   if (type === "SIGNUP_PREAPPROVE") {
     if (status === "APPROVED") return "Approved: club created";
     if (status === "REJECTED") return "Sent back for review";
+  }
+  if (type === "SIGNUP_EDIT") {
+    if (status === "APPROVED") return "Approved: details corrected";
+    if (status === "REJECTED") return "Declined: details unchanged";
   }
   return REQUEST_STATUS_LABELS[status] ?? status;
 }

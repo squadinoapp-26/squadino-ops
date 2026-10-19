@@ -6,7 +6,7 @@ import { cleanReason, parseSignupPreApprove } from "@/lib/changeRequests";
 import { submitChange } from "@/lib/changeRequests.server";
 import { ChangeError } from "@/lib/changeError";
 import { approveSignup, checkWebAddress } from "@/lib/signupApproval.server";
-import { pendingRequestFor } from "@/lib/signupReview.server";
+import { pendingEditFor, pendingRequestFor } from "@/lib/signupReview.server";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
 
 // Step 1 of setting a new client up. Super admins and admins approve here and now, with a written reason, which
@@ -30,6 +30,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       { error: "This signup is already waiting for an admin's decision. An admin needs to decide that first." },
       { status: 409 },
     );
+  }
+
+  // Approving would create the club from details that are about to change.
+  if (await pendingEditFor(id)) {
+    return NextResponse.json({ error: "This signup has a correction to its details waiting for an admin. An admin needs to decide that first." }, { status: 409 });
   }
 
   const body = await req.json().catch(() => ({}));

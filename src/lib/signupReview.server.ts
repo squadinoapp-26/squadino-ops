@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { isMissingTable } from "@/lib/prismaErrors";
 import { recordAudit } from "@/lib/auditLog.server";
 import { ChangeError } from "@/lib/changeError";
+import { signupEditChanges } from "@/lib/changeRequests";
+import type { AuditChange } from "@/lib/auditLog";
 
 export type SignupRequestKind = "REJECT" | "PREAPPROVE";
 
@@ -54,6 +56,45 @@ export async function pendingRequestFor(signupId: string): Promise<PendingSignup
   return (await listPendingSignupRequests()).find((r) => r.signupId === signupId) ?? null;
 }
 
+// A correction to a signup's details that an admin has not decided yet. It is kept apart from the approve / reject requests above on
+// purpose: the signup still shows in the ordinary "new signups" list (it is only paused, see the routes that call pendingEditFor).
+export interface PendingSignupEdit {
+  requestId: string;
+  signupId: string;
+  // Why whoever asked says the details were wrong.
+  reason: string | null;
+  changes: AuditChange[];
+  requestedByName: string;
+  requestedByRole: string;
+  createdAt: Date;
+}
+
+export async function listPendingSignupEdits(): Promise<PendingSignupEdit[]> {
+  try {
+    const rows = await prisma.changeRequest.findMany({ where: { type: "SIGNUP_EDIT", status: "PENDING" }, orderBy: { createdAt: "asc" } });
+    return rows.flatMap((r) => {
+      const p = r.payload as { signupId?: unknown } | null;
+      if (!p || typeof p.signupId !== "string") return [];
+      return [{
+        requestId: r.id,
+        signupId: p.signupId,
+        reason: r.reason,
+        changes: signupEditChanges(r.payload),
+        requestedByName: r.requestedByName,
+        requestedByRole: r.requestedByRole,
+        createdAt: r.createdAt,
+      }];
+    });
+  } catch (e) {
+    if (isMissingTable(e)) return [];
+    throw e;
+  }
+}
+
+export async function pendingEditFor(signupId: string): Promise<PendingSignupEdit | null> {
+  return (await listPendingSignupEdits()).find((r) => r.signupId === signupId) ?? null;
+}
+
 /** Puts a signup an admin already rejected back in the queue of signups waiting for review. A reason is required. */
 export async function reinstateSignup(
   signupId: string,
@@ -83,6 +124,8 @@ export interface SignupHistoryEntry {
   actorName: string;
   actorRole: string;
   note: string | null;
+  // Field-by-field old -> new values, for entries that changed the signup's details (empty for the rest).
+  changes: AuditChange[];
 }
 
 /**
@@ -91,11 +134,12 @@ export interface SignupHistoryEntry {
  */
 export async function listSignupHistory(signupId: string): Promise<SignupHistoryEntry[]> {
   try {
-    return await prisma.platformAuditLog.findMany({
+    const rows = await prisma.platformAuditLog.findMany({
       where: { targetType: "signup", targetId: signupId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, createdAt: true, action: true, actorName: true, actorRole: true, note: true },
+      select: { id: true, createdAt: true, action: true, actorName: true, actorRole: true, note: true, changes: true },
     });
+    return rows.map((r) => ({ ...r, changes: Array.isArray(r.changes) ? (r.changes as unknown as AuditChange[]) : [] }));
   } catch (e) {
     if (isMissingTable(e)) return [];
     throw e;

@@ -1,7 +1,9 @@
 // Correcting a pending signup's details from /signups/[id] before
 // it's approved: validation, the fields the change log compares, and the
 // payment warnings shown when the package changes. Pure, so it's unit-tested
-// and shared by the edit form and PATCH /api/signups/[id].
+// and shared by the edit form and PATCH /api/signups/[id]. WHO may change
+// the signup (an admin directly, everyone else through an admin's approval)
+// is decided in changeRequests.ts / changeRequests.server.ts, not here.
 import { getSignupPackage, type SignupAppVersion } from "@/lib/signupPackages";
 
 // Same choices as the marketing site's signup form (Website/src/components/SignupForm.tsx).
@@ -45,6 +47,31 @@ export interface SignupEditData {
   contactName: string;
   contactEmail: string;
   contactPhone: string | null;
+}
+
+/**
+ * Just the editable values of a signup row, copied. A correction keeps this as its "before", so the
+ * approver sees exactly what would change and an approval can tell if the signup moved on since.
+ */
+export function signupEditSnapshot(row: SignupEditData): SignupEditData {
+  return {
+    packageKey: row.packageKey,
+    interval: row.interval,
+    trialDays: row.trialDays,
+    appVersion: row.appVersion,
+    clubName: row.clubName,
+    registeredName: row.registeredName,
+    orgType: row.orgType,
+    sports: [...row.sports],
+    street: row.street,
+    suburb: row.suburb,
+    postcode: row.postcode,
+    requestedUrl: row.requestedUrl,
+    estimatedUsers: row.estimatedUsers,
+    contactName: row.contactName,
+    contactEmail: row.contactEmail,
+    contactPhone: row.contactPhone,
+  };
 }
 
 // The signup as it is now — its values are always allowed to stay, even if

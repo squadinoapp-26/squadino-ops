@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSignupEdit, packageChangeWarnings, type CurrentSignup } from "./signupEdit";
+import { parseSignupEdit, packageChangeWarnings, signupEditSnapshot, type CurrentSignup, type SignupEditData } from "./signupEdit";
 
 const CATALOG = ["Basketball", "Netball", "Swimming"];
 const CURRENT: CurrentSignup = { packageKey: "growth", appVersion: "BASIC", orgType: "Club", sports: ["Basketball"] };
@@ -109,5 +109,23 @@ describe("packageChangeWarnings", () => {
 
   it("has nothing to warn about for test-mode payments", () => {
     expect(packageChangeWarnings("dummy", growth, { packageKey: "scale", interval: "yearly" })).toEqual([]);
+  });
+});
+
+describe("signupEditSnapshot", () => {
+  it("keeps only the editable values, and copies the sports list", () => {
+    const row = {
+      id: "s1", status: "PENDING", stripeCustomerId: "cus_1", createdAt: new Date(),
+      packageKey: "growth", interval: "monthly", trialDays: 14, appVersion: "BASIC", clubName: "Lakers", registeredName: null, orgType: "Club",
+      sports: ["Basketball"], street: null, suburb: "Berwick", postcode: "3805", requestedUrl: null, estimatedUsers: 200,
+      contactName: "Sam", contactEmail: "sam@example.com", contactPhone: null,
+    } as unknown as SignupEditData;
+    const snap = signupEditSnapshot(row);
+    expect(Object.keys(snap).sort()).toEqual([
+      "appVersion", "clubName", "contactEmail", "contactName", "contactPhone", "estimatedUsers", "interval", "orgType",
+      "packageKey", "postcode", "registeredName", "requestedUrl", "sports", "street", "suburb", "trialDays",
+    ]);
+    expect(snap.sports).toEqual(["Basketball"]);
+    expect(snap.sports).not.toBe(row.sports);
   });
 });
