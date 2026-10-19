@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { normaliseSubdomain, subdomainProblem } from "@/lib/subdomain";
+import { normaliseSubdomain, subdomainProblem, type SubdomainSuggestion } from "@/lib/subdomain";
+import WebAddressSuggestions from "@/components/WebAddressSuggestions";
 
 // Super admins and admins approve or reject here and now, and always say why. Everyone else (moderators, customer
 // care) can only PRE-APPROVE (optional notes) or ask for a rejection (a reason is required): both go to an admin.
@@ -11,6 +12,8 @@ export default function SignupActions({
   canReview,
   isAdmin,
   suggestedSubdomain,
+  suggestions,
+  takenSlugs,
   rootDomain,
 }: {
   id: string;
@@ -18,8 +21,11 @@ export default function SignupActions({
   needsPaymentCheck: boolean;
   canReview: boolean;
   isAdmin: boolean;
-  // What the club name would give; the reviewer can shorten it before approving.
+  // The short address filled in to start with (the first free choice from the club name); the reviewer can change it.
   suggestedSubdomain: string;
+  // All the short choices shown under the box, and the ones another club already uses.
+  suggestions: SubdomainSuggestion[];
+  takenSlugs: string[];
   rootDomain: string;
 }) {
   const router = useRouter();
@@ -33,7 +39,8 @@ export default function SignupActions({
   const [approveText, setApproveText] = useState("");
 
   const slug = normaliseSubdomain(subdomain);
-  const slugProblem = subdomainProblem(slug);
+  const slugProblem = subdomainProblem(slug)
+    ?? (takenSlugs.includes(slug) ? `${slug}.${rootDomain} is already taken — pick another web address.` : null);
 
   async function approve() {
     setBusy(true);
@@ -96,6 +103,8 @@ export default function SignupActions({
           <p className={`text-xs mt-1.5 ${slugProblem ? "text-red-400" : "text-slate-500"}`}>
             {slugProblem ?? `Keep it short and easy to type. The club will use ${slug}.${rootDomain}.`}
           </p>
+          <WebAddressSuggestions suggestions={suggestions} taken={takenSlugs} current={slug} rootDomain={rootDomain}
+            onPick={(picked) => { setSubdomain(picked); setError(""); }} />
         </div>
         {needsPaymentCheck && (
           <label className="flex items-start gap-3 cursor-pointer">
