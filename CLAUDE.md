@@ -34,7 +34,7 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    `src/lib/modules.ts` (plan → modules, from the club app's `src/lib/settings.ts`),
    `src/lib/clubCreate.ts` (club creation), `src/lib/signupPackages.ts` (mirror of
    `Website/src/lib/packages.ts` — `signupPackages.test.ts` has the expected values written
-   out; change both together), `hostClub.ts`, `subdomain.ts`, `sportCatalog.ts`,
+   out; change both together), `hostClub.ts`, `subdomain.ts` (also holds `suggestSubdomains`: the short web-address choices on the approve screen and New Client form, owner 2026-10-19, initials first; identical copy and tests in the club app), `sportCatalog.ts`,
    `restrictedWordsList.ts`, and `welcomeEmail` in `src/lib/email.ts` (the setup email: set the password, how to sign in, quick tips for setting the club up; the club app's
    `src/lib/email.ts` holds an IDENTICAL copy and each repo has the same `welcomeEmail.test.ts`; `sendOwnerSetupEmails` passes the owner's email and, for a Coach-plan club, `coach: true` so the tips fit a
    coaching business). It is the "second email" that the club app's "We've received your signup" email promises the customer (owner, 2026-10-17). Its set-password link is valid for 24 hours (`SETUP_LINK_TTL_MINUTES` in `src/lib/passwordReset.server.ts`, an identical copy of the club app's file); only "Forgot password" keeps 60 minutes.

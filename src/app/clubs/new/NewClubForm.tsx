@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { suggestSubdomains } from "@/lib/subdomain";
+import WebAddressSuggestions from "@/components/WebAddressSuggestions";
 
 const SPORTS = ["Swimming", "Football", "Basketball", "Cricket", "Netball", "Soccer", "Tennis", "Rugby", "Athletics", "Other"];
 const ORG_TYPES = ["Club", "School", "Association", "Academy", "League", "Community Group"];
@@ -32,7 +34,8 @@ export default function NewClubForm({ packages }: { packages: PlanPackage[] }) {
 
   function handleNameChange(v: string) {
     setName(v);
-    if (!slugTouched) setSlug(slugify(v));
+    // A short address from the club name (initials first, see suggestSubdomains) until the admin types their own.
+    if (!slugTouched) setSlug(suggestSubdomains(v)[0]?.slug ?? slugify(v));
   }
 
   function toggleSport(sport: string) {
@@ -98,6 +101,8 @@ export default function NewClubForm({ packages }: { packages: PlanPackage[] }) {
               className="input flex-1" placeholder="wantirnatc" />
             <span className="text-sm text-slate-500 whitespace-nowrap">.squadino.com</span>
           </div>
+          <WebAddressSuggestions suggestions={suggestSubdomains(name)} current={slug} rootDomain="squadino.com"
+            onPick={(picked) => { setSlug(picked); setSlugTouched(true); }} />
           <p className="text-xs text-slate-500 mt-1">
             Reserved from creation, but only routes members there once its DNS + Vercel custom domain exist and
             &quot;Subdomain is live&quot; is turned on in the club&apos;s editor.

@@ -10,7 +10,7 @@ import { auditActionLabel } from "@/lib/auditLog";
 import { PLATFORM_ROLE_LABELS } from "@/lib/auth";
 import { getPlatformUser, canReviewSignups, canEditSignups, canViewLogs, canApproveChanges, requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { signupPackageLabel } from "@/lib/signupPackages";
-import { slugify } from "@/lib/subdomain";
+import { suggestSubdomains } from "@/lib/subdomain";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
 import { withCurrentSports } from "@/lib/sportCatalog";
 import { listSportNames } from "@/lib/sportCatalog.server";
@@ -35,6 +35,14 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
   const when = (d: Date) => new Date(d).toLocaleString("en-AU", { timeZone: "Australia/Melbourne" });
 
   const address = [signup.street, signup.suburb, signup.postcode].filter(Boolean).join(", ");
+
+  // Short web address choices from the club name (initials first), with the ones another club already uses marked.
+  // Only needed while the signup can still be approved; the approval itself checks again, so this just saves a wrong turn.
+  const suggestions = suggestSubdomains(signup.clubName);
+  const takenSlugs = signup.status === "PENDING" && suggestions.length
+    ? (await prisma.club.findMany({ where: { slug: { in: suggestions.map((x) => x.slug) } }, select: { slug: true } })).map((c) => c.slug)
+    : [];
+  const firstFree = suggestions.find((x) => !takenSlugs.includes(x.slug)) ?? suggestions[0];
 
   const dummy = isDummyPaymentId(signup.stripeCustomerId);
   const payment = !signup.stripeCustomerId
@@ -194,7 +202,7 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
             )}
             <SignupActions id={signup.id} needsPaymentCheck={!!signup.stripeCustomerId} canReview={canReviewSignups(viewer?.role)}
               isAdmin={canDecide}
-              suggestedSubdomain={slugify(signup.clubName)} rootDomain={ROOT_DOMAIN} />
+              suggestedSubdomain={firstFree?.slug ?? ""} suggestions={suggestions} takenSlugs={takenSlugs} rootDomain={ROOT_DOMAIN} />
           </div>
         )}
 
