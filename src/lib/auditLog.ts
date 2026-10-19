@@ -4,6 +4,8 @@
 
 export const AUDIT_ACTIONS = {
   "signup.edit": "Edited signup",
+  "signup.edit_requested": "Asked for a signup's details to be corrected",
+  "signup.edit_declined": "Declined a correction to a signup's details",
   "signup.approve": "Approved signup",
   "signup.reject": "Rejected signup",
   "signup.preapprove": "Pre-approved signup",

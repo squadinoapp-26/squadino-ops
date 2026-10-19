@@ -61,6 +61,8 @@ describe("formatAuditValue", () => {
 describe("auditActionLabel", () => {
   it("names known actions and passes unknown ones through", () => {
     expect(auditActionLabel("signup.edit")).toBe("Edited signup");
+    expect(auditActionLabel("signup.edit_requested")).toBe("Asked for a signup's details to be corrected");
+    expect(auditActionLabel("signup.edit_declined")).toBe("Declined a correction to a signup's details");
     expect(auditActionLabel("something.new")).toBe("something.new");
   });
 });

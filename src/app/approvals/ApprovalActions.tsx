@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 
 export default function ApprovalActions({ id, type }: { id: string; type?: string }) {
   // New-signup requests are always decided with a written reason; for "reject this signup" approving makes the rejection
-  // final and turning it down puts the signup back in the queue, for a pre-approval approving creates the club.
+  // final and turning it down puts the signup back in the queue, for a pre-approval approving creates the club, and for a
+  // correction approving changes the signup's details and declining leaves them as they were.
   const signupReject = type === "SIGNUP_REJECT";
   const preapprove = type === "SIGNUP_PREAPPROVE";
-  const noteRequired = signupReject || preapprove;
+  const signupEdit = type === "SIGNUP_EDIT";
+  const noteRequired = signupReject || preapprove || signupEdit;
   const router = useRouter();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -39,11 +41,11 @@ export default function ApprovalActions({ id, type }: { id: string; type?: strin
       <div className="flex gap-3">
         <button type="button" onClick={() => decide("approve")} disabled={busy !== null || (noteRequired && !note.trim())}
           className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
-          {busy === "approve" ? "Approving…" : signupReject ? "Approve rejection" : preapprove ? "Approve & create club" : "Approve and apply"}
+          {busy === "approve" ? "Approving…" : signupReject ? "Approve rejection" : preapprove ? "Approve & create club" : signupEdit ? "Approve correction" : "Approve and apply"}
         </button>
         <button type="button" onClick={() => decide("reject")} disabled={busy !== null || (noteRequired && !note.trim())}
           className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
-          {busy === "reject" ? (signupReject ? "Re-instating…" : preapprove ? "Sending back…" : "Rejecting…") : signupReject ? "Re-instate signup" : preapprove ? "Send back for review" : "Reject"}
+          {busy === "reject" ? (signupReject ? "Re-instating…" : preapprove ? "Sending back…" : signupEdit ? "Declining…" : "Rejecting…") : signupReject ? "Re-instate signup" : preapprove ? "Send back for review" : signupEdit ? "Decline correction" : "Reject"}
         </button>
       </div>
       {error && <p className="text-sm text-red-400">{error}</p>}

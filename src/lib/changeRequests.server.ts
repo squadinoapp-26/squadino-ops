@@ -7,10 +7,12 @@ import { isMissingTable } from "@/lib/prismaErrors";
 import { runClubBillingAction } from "@/lib/clubBillingApi.server";
 import {
   CHANGE_TYPES, billingActionFor, decisionNoteRequired, type ChangeType, type PackageEditPayload, type PlanChangePayload,
-  type SignupPreApprovePayload, type SignupRejectPayload,
+  type SignupEditPayload, type SignupPreApprovePayload, type SignupRejectPayload,
 } from "@/lib/changeRequests";
 import { ChangeError } from "@/lib/changeError";
 import { approveSignup } from "@/lib/signupApproval.server";
+import { parseSignupEdit, signupEditSnapshot, SIGNUP_EDIT_FIELDS } from "@/lib/signupEdit";
+import { listSportNames } from "@/lib/sportCatalog.server";
 
 export { ChangeError };
 
@@ -110,6 +112,38 @@ export async function executeChange(
       // The admin's approval of a pre-approved signup: the club is created now, in the admin's name.
       const p = payload as SignupPreApprovePayload;
       await approveSignup({ signupId: p.signupId, slug: p.slug, paymentChecked: p.paymentChecked === true, actor, note: note ?? null });
+      return;
+    }
+
+    case "SIGNUP_EDIT": {
+      // The corrected details are saved now, in the actor's name (an admin's own correction, or an admin approving a request).
+      const p = payload as SignupEditPayload;
+      const signup = await prisma.signupRequest.findUnique({ where: { id: p.signupId } });
+      if (!signup) throw new ChangeError("Signup not found", 404);
+      if (signup.status !== "PENDING") throw new ChangeError("This signup has already been reviewed, so its details can't be changed any more.", 409);
+
+      const current = signupEditSnapshot(signup);
+      // If the details moved on since the correction was asked for, the old -> new list the approver read is no longer what would happen.
+      if (diffFields(p.before, current, SIGNUP_EDIT_FIELDS).length > 0) {
+        throw new ChangeError("This signup's details changed after the correction was asked for. Ask for the correction again.", 409);
+      }
+      // Checked again with the same rules, in case what was stored is not what the form would send today.
+      const checked = parseSignupEdit(p.data, current, await listSportNames());
+      if (!checked.ok) throw new ChangeError(checked.error);
+      const changes = diffFields(current, checked.data, SIGNUP_EDIT_FIELDS);
+      if (changes.length === 0) throw new ChangeError("These details are already on the signup, so there is nothing to change.", 409);
+
+      // The status in the filter stops this from landing on a signup someone has just approved or rejected.
+      const done = await prisma.signupRequest.updateMany({ where: { id: signup.id, status: "PENDING" }, data: checked.data });
+      if (done.count === 0) throw new ChangeError("This signup has already been reviewed, so its details can't be changed any more.", 409);
+      await recordAudit(actor, {
+        action: "signup.edit",
+        targetType: "signup",
+        targetId: signup.id,
+        targetLabel: checked.data.clubName,
+        changes,
+        note: withNote(null),
+      });
       return;
     }
 
@@ -215,16 +249,18 @@ export async function decideChange(
       targetLabel: request.targetLabel,
       note: `${label} (asked by ${request.requestedByName})${decisionNote ? ` · ${decisionNote}` : ""}`,
     });
-    // Turning a signup request down puts the signup back in the queue; say so on the signup's own history too.
+    // Turning a signup request down puts the signup back in the queue (or, for a correction, leaves it as it was); say so on the
+    // signup's own history too.
     const signupId = decisionNoteRequired(request.type) ? (request.payload as { signupId?: unknown } | null)?.signupId : null;
     if (typeof signupId === "string") {
-      const preapprove = request.type === "SIGNUP_PREAPPROVE";
+      const kind = request.type === "SIGNUP_PREAPPROVE" ? "Pre-approval" : request.type === "SIGNUP_EDIT" ? "Correction to the details" : "Rejection";
+      const action = request.type === "SIGNUP_PREAPPROVE" ? "signup.preapprove_declined" : request.type === "SIGNUP_EDIT" ? "signup.edit_declined" : "signup.reinstate";
       await recordAudit(actor, {
-        action: preapprove ? "signup.preapprove_declined" : "signup.reinstate",
+        action,
         targetType: "signup",
         targetId: signupId,
         targetLabel: request.targetLabel,
-        note: `${preapprove ? "Pre-approval" : "Rejection"} asked for by ${request.requestedByName}${request.reason ? ` (${preapprove ? "notes" : "reason"}: ${request.reason})` : ""} was not approved · Admin's reason: ${decisionNote}`,
+        note: `${kind} asked for by ${request.requestedByName}${request.reason ? ` (${request.type === "SIGNUP_PREAPPROVE" ? "notes" : "reason"}: ${request.reason})` : ""} was not approved · Admin's reason: ${decisionNote}`,
       });
     }
     return { status: "REJECTED" };

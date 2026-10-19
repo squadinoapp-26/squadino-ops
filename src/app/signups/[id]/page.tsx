@@ -5,8 +5,8 @@ import SignupActions from "./SignupActions";
 import SignupEditor from "./SignupEditor";
 import { isDummyPaymentId } from "@/lib/payment";
 import SignupRequestDecision from "@/components/SignupRequestDecision";
-import { pendingRequestFor, listSignupHistory } from "@/lib/signupReview.server";
-import { auditActionLabel } from "@/lib/auditLog";
+import { pendingEditFor, pendingRequestFor, listSignupHistory } from "@/lib/signupReview.server";
+import { auditActionLabel, formatAuditValue } from "@/lib/auditLog";
 import { PLATFORM_ROLE_LABELS } from "@/lib/auth";
 import { getPlatformUser, canReviewSignups, canEditSignups, canViewLogs, canApproveChanges, requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { signupPackageLabel } from "@/lib/signupPackages";
@@ -27,8 +27,10 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
   if (!signup) notFound();
 
   // A moderator's pre-approval or rejection waits for an admin: until then the signup can't be approved or rejected again.
-  const [pending, history] = await Promise.all([
+  // A correction to its details waits for an admin the same way, and pauses approving, rejecting and editing meanwhile.
+  const [pending, pendingEdit, history] = await Promise.all([
     signup.status === "PENDING" ? pendingRequestFor(signup.id) : null,
+    signup.status === "PENDING" ? pendingEditFor(signup.id) : null,
     listSignupHistory(signup.id),
   ]);
   const canDecide = canApproveChanges(viewer?.role);
@@ -96,13 +98,16 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
             {pending.kind === "REJECT" ? "Rejection waiting for an admin" : "Pre-approved, waiting for an admin"}
           </span>
         )}
+        {pendingEdit && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900 text-amber-300">Correction waiting for an admin</span>
+        )}
         {canViewLogs(viewer?.role) && (
           <Link href={`/logs?item=${signup.id}`} className="ml-auto text-sm text-slate-400 hover:text-white">History →</Link>
         )}
       </div>
 
       <div className="max-w-3xl mx-auto p-6 space-y-6">
-        {signup.status === "PENDING" && canEditSignups(viewer?.role) ? (
+        {signup.status === "PENDING" && canReviewSignups(viewer?.role) && !pending && !pendingEdit ? (
           <SignupEditor
             id={signup.id}
             signup={{
@@ -114,10 +119,15 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
             }}
             sportOptions={withCurrentSports(await listSportNames(), signup.sports)}
             paymentKind={!signup.stripeCustomerId ? "none" : dummy ? "dummy" : "stripe"}
+            direct={canEditSignups(viewer?.role)}
           >
             {details}
           </SignupEditor>
         ) : details}
+
+        {signup.status === "PENDING" && pending && canReviewSignups(viewer?.role) && (
+          <p className="text-xs text-slate-500">The details can&apos;t be corrected while an approval or rejection is waiting for an admin. Once an admin decides it, they can be corrected here if the signup is still pending.</p>
+        )}
 
         {club && (
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 flex items-center justify-between gap-4">
@@ -132,6 +142,38 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
               className="bg-slate-700 hover:bg-slate-600 text-sm px-4 py-2 rounded-xl transition-colors whitespace-nowrap">
               {club.subdomainReady ? "Manage →" : "Finish setup →"}
             </Link>
+          </div>
+        )}
+
+        {pendingEdit && (
+          <div className="bg-slate-800 border border-amber-800/60 rounded-2xl p-6 space-y-3">
+            <p className="font-semibold">Correction waiting for an admin</p>
+            <p className="text-sm text-slate-300">
+              {`${pendingEdit.requestedByName} (${PLATFORM_ROLE_LABELS[pendingEdit.requestedByRole] ?? pendingEdit.requestedByRole}) wants these details changed · ${when(pendingEdit.createdAt)}. Nothing has changed yet.`}
+            </p>
+            <ul className="text-sm rounded-xl bg-slate-900/60 border border-slate-700 divide-y divide-slate-700">
+              {pendingEdit.changes.map((c) => (
+                <li key={c.field} className="p-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">{c.label}</p>
+                  <p className="mt-0.5 break-words">
+                    <span className="text-red-300">{formatAuditValue(c.from)}</span>
+                    <span className="text-slate-500">{" → "}</span>
+                    <span className="text-green-300">{formatAuditValue(c.to)}</span>
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm rounded-xl bg-slate-900/60 border border-slate-700 p-3">{`Reason: ${pendingEdit.reason ?? "—"}`}</p>
+            {canDecide ? (
+              <>
+                <p className="text-xs text-slate-400">
+                  Approve to save these details on the signup, or decline to leave them as they are. Either way, say why. Approving, rejecting and editing this signup are paused until you decide.
+                </p>
+                <SignupRequestDecision kind="edit-request" requestId={pendingEdit.requestId} />
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">An admin decides this. Nothing more to do until they do; approving and rejecting this signup are paused meanwhile.</p>
+            )}
           </div>
         )}
 
@@ -186,7 +228,7 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
           </div>
         )}
 
-        {signup.status === "PENDING" && !pending && (
+        {signup.status === "PENDING" && !pending && !pendingEdit && (
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-4">
             {signup.stripeCustomerId && (
               <div className="rounded-xl bg-slate-900/60 border border-slate-700 p-4 text-sm text-slate-300">
@@ -218,6 +260,18 @@ export default async function SignupDetailPage({ params }: { params: Promise<{ i
                     {`${h.actorName} (${PLATFORM_ROLE_LABELS[h.actorRole] ?? h.actorRole}) · ${when(h.createdAt)}`}
                   </p>
                   {h.note && <p className="text-sm text-slate-300 mt-1">{h.note}</p>}
+                  {h.changes.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5 text-sm">
+                      {h.changes.map((c) => (
+                        <li key={c.field} className="break-words">
+                          <span className="text-slate-500">{`${c.label}: `}</span>
+                          <span className="text-red-300">{formatAuditValue(c.from)}</span>
+                          <span className="text-slate-500">{" → "}</span>
+                          <span className="text-green-300">{formatAuditValue(c.to)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

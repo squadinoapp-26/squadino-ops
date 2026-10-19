@@ -18,13 +18,16 @@ type Form = Omit<SignupEditData, "appVersion" | "estimatedUsers" | "trialDays" |
 const inputClass = "w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-slate-500";
 
 // Wraps the signup's read-only details (passed as children) with an "Edit
-// details" button that swaps them for a form. Saving sends only the form's
-// values; the server works out what changed and stamps it in the Logs.
+// details" button that swaps them for a form. Saving sends the form's values
+// and a reason; the server works out what changed and stamps it in the Logs.
+// An admin's correction is saved at once (`direct`); anyone else's is only SENT
+// to an admin, and the details stay as they are until an admin approves it.
 export default function SignupEditor({
   id,
   signup,
   sportOptions,
   paymentKind,
+  direct,
   children,
 }: {
   id: string;
@@ -32,6 +35,7 @@ export default function SignupEditor({
   // The platform sports list plus any sport this signup already has.
   sportOptions: string[];
   paymentKind: SignupPaymentKind;
+  direct: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -48,6 +52,7 @@ export default function SignupEditor({
   };
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Form>(initial);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -70,6 +75,7 @@ export default function SignupEditor({
 
   function cancel() {
     setForm(initial);
+    setReason("");
     setError("");
     setEditing(false);
   }
@@ -81,7 +87,7 @@ export default function SignupEditor({
     const res = await fetch(`/api/signups/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, reason }),
     });
     const data = await res.json().catch(() => ({}));
     setSaving(false);
@@ -90,7 +96,15 @@ export default function SignupEditor({
       return;
     }
     setEditing(false);
-    setNotice(data.changed ? `Saved. ${data.changed === 1 ? "1 change" : `${data.changed} changes`} recorded in the Logs.` : "Nothing had changed.");
+    setReason("");
+    const count = data.changed === 1 ? "1 change" : `${data.changed} changes`;
+    setNotice(
+      !data.changed
+        ? "Nothing had changed."
+        : data.requested
+          ? `Sent to an admin for approval (${count}). The details stay as they are until an admin approves it.`
+          : `Saved. ${count} recorded in the Logs.`,
+    );
     router.refresh();
   }
 
@@ -115,8 +129,12 @@ export default function SignupEditor({
   return (
     <form onSubmit={save} className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-5">
       <div>
-        <h2 className="font-semibold">Edit signup details</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Every change is recorded in the Logs with who made it and the old and new values.</p>
+        <h2 className="font-semibold">{direct ? "Edit signup details" : "Correct signup details"}</h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {direct
+            ? "Every change is recorded in the Logs with who made it, your reason, and the old and new values."
+            : "Nothing changes yet: this goes to an admin, who approves or declines it. Every step is recorded in the Logs with who did it and the old and new values."}
+        </p>
       </div>
 
       <Section title="Package">
@@ -208,11 +226,18 @@ export default function SignupEditor({
         </div>
       </Section>
 
+      <Section title="Why is this being changed?">
+        <Labelled label="Reason (required, recorded with your name)" htmlFor="edit-reason">
+          <input id="edit-reason" value={reason} maxLength={500} onChange={(e) => { setReason(e.target.value); setError(""); }}
+            placeholder="For example: the customer typed their email wrong" className={inputClass} />
+        </Labelled>
+      </Section>
+
       {error && <p className="rounded-lg bg-red-950 text-red-300 px-3 py-2 text-sm">{error}</p>}
       <div className="flex gap-3">
-        <button type="submit" disabled={saving}
+        <button type="submit" disabled={saving || !reason.trim()}
           className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">
-          {saving ? "Saving…" : "Save changes"}
+          {saving ? (direct ? "Saving…" : "Sending…") : direct ? "Save changes" : "Send to an admin"}
         </button>
         <button type="button" onClick={cancel} disabled={saving}
           className="bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors">

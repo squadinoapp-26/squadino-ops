@@ -8,9 +8,11 @@ import { normaliseSubdomain, subdomainProblem } from "@/lib/subdomain";
 //  - "reject-request": a moderator wants it rejected. Approve the rejection, or re-instate (turn the request down).
 //  - "preapprove-request": a moderator pre-approved it. Approve and create the club (the web address can be changed),
 //    or send it back for review.
+//  - "edit-request": someone asked to correct the signup's details. Approve (the details change now) or decline (nothing changes).
 //  - "rejected": already rejected. Re-instate it.
 type Props =
   | { kind: "reject-request"; requestId: string }
+  | { kind: "edit-request"; requestId: string }
   | { kind: "preapprove-request"; requestId: string; slug: string | null; rootDomain: string }
   | { kind: "rejected"; signupId: string };
 
@@ -86,6 +88,18 @@ export default function SignupRequestDecision(props: Props) {
             <button type="button" disabled={!ready} onClick={() => decide("sendback", "reject")}
               className={`${button} bg-slate-700 hover:bg-slate-600`}>
               {busy === "sendback" ? "Sending back…" : "Send back for review"}
+            </button>
+          </>
+        )}
+        {props.kind === "edit-request" && (
+          <>
+            <button type="button" disabled={!ready} onClick={() => decide("approve", "approve")}
+              className={`${button} bg-green-600 hover:bg-green-700 text-white`}>
+              {busy === "approve" ? "Saving…" : "Approve correction"}
+            </button>
+            <button type="button" disabled={!ready} onClick={() => decide("decline", "reject")}
+              className={`${button} bg-slate-700 hover:bg-slate-600`}>
+              {busy === "decline" ? "Declining…" : "Decline correction"}
             </button>
           </>
         )}

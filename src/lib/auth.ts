@@ -134,11 +134,13 @@ export function canManageFullPackage(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
 }
 
-// Correcting a pending signup's details, and reading the change Logs.
+// Correcting a pending signup's details straight away (always with a written reason). Everyone else who can review signups sends the
+// correction to an admin instead (type SIGNUP_EDIT, see changeRequests.server.ts), so this is the same group as canApproveChanges.
 export function canEditSignups(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
 }
 
+// Reading the change Logs.
 export function canViewLogs(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
 }

@@ -12,7 +12,7 @@ is not a developer: plain words, ask before product-behaviour decisions.
 
 ## What it does
 
-Signups (review, edit, approve, reject with a reason an admin must confirm) · Set up subdomain (Vercel) · Send setup email ·
+Signups (review, correct, approve, reject with a reason an admin must confirm) · Set up subdomain (Vercel) · Send setup email ·
 Club status (deactivate / reactivate / delete after 12 months) · New Client (by hand) ·
 Sports list · Restricted words · Logs (searchable by club or staff name, username, email, web address, task, date and reason: `listAuditLogs` in `src/lib/auditLog.server.ts`) · Manage users (staff) · Packages & prices ·
 Manage accounts (searchable club list; each club's card shows its package (`Package: Growth`) and its user limit override when it has one (`User limit override: 1,250`), and a club with NO package and NO override is flagged amber "No package (can't add members)" because the club app refuses new members for it; wording in `clubPlanLabels`, `src/lib/clubAccounts.ts`) · dashboard alerts · each club's Stripe billing status
@@ -91,6 +91,16 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
      entry on the signup itself (`signup.preapprove`, `signup.reject_requested`, `signup.approve`, `signup.reject`,
      `signup.preapprove_declined`, `signup.reinstate`), and the signup page shows them to all staff as "Review history".
      See rule 7.
+   - **Correcting a signup's details is two-step too** (owner, 2026-10-19: customers make typing mistakes; type `SIGNUP_EDIT`, no schema change). On `/signups/[id]` ("Edit details",
+     `PATCH /api/signups/[id]`) anyone who can review signups can correct a PENDING signup, and **everyone gives a written reason** (`parseSignupEditRequest`, `src/lib/changeRequests.ts`, built
+     on the old `parseSignupEdit` field rules). SUPER_ADMIN and ADMIN correct straight away (`submitChange` runs `executeChange`, Logs `signup.edit` with old to new values and the reason);
+     a moderator or customer care officer only SENDS it: a `ChangeRequest` holds the new details AND the details as they were (`SignupEditPayload`), the signup stays unchanged, and the page
+     shows the proposal as old to new. An admin approves or declines at `/approvals` or on the signup page with a written reason (`decisionNoteRequired`); only approval saves. Approval
+     re-checks that the signup is still PENDING and still has the "before" details (otherwise the request fails with a clear message and the signup is unblocked), validates the new details
+     again, and the status in the update filter stops it landing on a signup someone just approved. A waiting correction pauses approve / pre-approve / reject / edit for that signup
+     (`pendingEditFor`, `src/lib/signupReview.server.ts`; the signup stays in the "new" list with a tag, unlike a waiting pre-approval or rejection), and a waiting pre-approval or rejection
+     pauses corrections. Logs: `signup.edit_requested`, `signup.edit` (on approval), `signup.edit_declined`, plus the usual `request.*` entries; all appear in the signup's Review history with
+     the old to new values. The customer is NOT emailed about a correction. The package change keeps its Stripe warning: correcting the package here changes the club the approval creates, not the Stripe subscription.
 6. Staff passwords are at least 12 characters (`src/lib/passwordPolicy.ts`).
 7. **The review trail is kept for good.** Never delete or edit a row of `platform_audit_logs`, and never delete a
    `signup_requests`, `change_requests` or `platform_users` row (switch staff off instead). `src/lib/recordsProtected.test.ts`

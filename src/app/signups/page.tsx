@@ -1,7 +1,7 @@
 import { requirePlatformSessionOrRedirect } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import { listPendingSignupRequests } from "@/lib/signupReview.server";
+import { listPendingSignupEdits, listPendingSignupRequests } from "@/lib/signupReview.server";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,8 @@ export default async function PendingSignupsPage() {
   // Signups a moderator has pre-approved or wants rejected are waiting for an admin, so they leave the "new" list and sit in their own.
   const awaitingAdmin = await listPendingSignupRequests();
   const awaitingIds = awaitingAdmin.map((r) => r.signupId);
+  // A correction to a signup's details also waits for an admin, but the signup stays in the "new" list with a tag.
+  const correctionIds = new Set((await listPendingSignupEdits()).map((r) => r.signupId));
   const [signups, recent, waiting, rejected] = await Promise.all([
     prisma.signupRequest.findMany({
       where: { status: "PENDING", id: { notIn: awaitingIds } },
@@ -52,6 +54,9 @@ export default async function PendingSignupsPage() {
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold">{s.clubName}</h3>
                   <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono uppercase">{s.packageKey}</span>
+                  {correctionIds.has(s.id) && (
+                    <span className="text-xs bg-amber-900 text-amber-300 px-2 py-0.5 rounded-full">Correction waiting for an admin</span>
+                  )}
                 </div>
                 <p className="text-sm text-slate-500 truncate">
                   {s.contactName} · {s.contactEmail} · ~{s.estimatedUsers} users
