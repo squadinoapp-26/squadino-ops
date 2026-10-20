@@ -1260,10 +1260,24 @@ model Staff {
   shifts                 Shift[]
   trainingSessions       TrainingSession[]
   trainingTemplates      TrainingTemplate[]
+  // The colour this coach shows in on the roster and the training schedule (see StaffColor).
+  color                  StaffColor?
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 
   @@map("staff")
+}
+
+// The colour an admin picked for a coach ("#rrggbb"), so shifts and training sessions show which coach is doing them.
+// Kept in its own table rather than a column on staff so code that reads it still works before the migration is applied.
+// A coach with no row here gets an automatic colour (src/lib/staffColors.ts).
+model StaffColor {
+  staffId   String   @id
+  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  color     String
+  updatedAt DateTime @updatedAt
+
+  @@map("staff_colors")
 }
 
 model Designation {
