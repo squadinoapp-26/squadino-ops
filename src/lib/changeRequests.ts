@@ -4,6 +4,7 @@
 
 import { diffFields, formatAuditValue, type AuditChange } from "@/lib/auditLog";
 import { parseSignupEdit, signupEditSnapshot, SIGNUP_EDIT_FIELDS, type SignupEditData } from "@/lib/signupEdit";
+import { daysWord, describeFreeDates, type FreeDaysRequest } from "@/lib/freeDays";
 
 export const CHANGE_TYPES = {
   PLAN_CHANGE: "Change plan or user limit",
@@ -15,6 +16,7 @@ export const CHANGE_TYPES = {
   SIGNUP_REJECT: "Reject a new signup",
   SIGNUP_PREAPPROVE: "Pre-approve a new signup",
   SIGNUP_EDIT: "Correct a new signup's details",
+  FREE_DAYS: "Give clubs free days",
 } as const;
 
 export type ChangeType = keyof typeof CHANGE_TYPES;
@@ -78,9 +80,13 @@ export interface SignupEditPayload {
   before: SignupEditData;
 }
 
-// All three signup requests are decided by an admin, who always gives a written reason, approving or not.
+// What a request for free service days holds: exactly what the customers would be told and the clubs they would go to, as written when
+// it was asked for, so the admin approves what will be sent. Same shape the club app checks again before doing it.
+export type FreeDaysPayload = FreeDaysRequest;
+
+// The signup requests and free days are decided by an admin, who always gives a written reason, approving or not.
 export function decisionNoteRequired(type: string): boolean {
-  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT";
+  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT" || type === "FREE_DAYS";
 }
 
 type Parsed<T> = { ok: true; payload: T } | { ok: false; error: string };
@@ -211,6 +217,11 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       const list = changes.map((c) => `${c.label}: ${formatAuditValue(c.from)} → ${formatAuditValue(c.to)}`).join("; ");
       return `${list ? `Correct this new signup's details (${list}). ` : "Correct this new signup's details. "}Approve it and the signup is changed; decline it and nothing changes`;
     }
+    case "FREE_DAYS": {
+      const dates = Array.isArray(p.dates) ? (p.dates as string[]) : [];
+      const clubs = Array.isArray(p.clubs) ? p.clubs.length : 0;
+      return `Give ${clubs} club${clubs === 1 ? "" : "s"} ${daysWord(dates.length)} free (${describeFreeDates(dates)}): each paying club's next payment moves out by that many days, a club on a free trial has its trial extended, and each club's admins are emailed the reason. Approve it and it is done and the emails go out; reject it and nothing changes`;
+    }
     case "SIGNUP_PREAPPROVE":
       return `Create the club for this new signup${typeof p.slug === "string" && p.slug ? ` at ${p.slug}.squadino.com` : ""}. Approve it and the club is created; send it back and the signup returns to the signups waiting for review`;
   }
@@ -232,6 +243,10 @@ export function requestStatusLabel(type: string, status: string): string {
   if (type === "SIGNUP_PREAPPROVE") {
     if (status === "APPROVED") return "Approved: club created";
     if (status === "REJECTED") return "Sent back for review";
+  }
+  if (type === "FREE_DAYS") {
+    if (status === "APPROVED") return "Approved: free days given";
+    if (status === "REJECTED") return "Rejected: no free days given";
   }
   if (type === "SIGNUP_EDIT") {
     if (status === "APPROVED") return "Approved: details corrected";

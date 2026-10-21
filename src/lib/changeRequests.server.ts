@@ -4,7 +4,8 @@ import { canApproveChanges } from "@/lib/auth";
 import { diffFields } from "@/lib/auditLog";
 import { recordAudit } from "@/lib/auditLog.server";
 import { isMissingTable } from "@/lib/prismaErrors";
-import { runClubBillingAction } from "@/lib/clubBillingApi.server";
+import { applyFreeDaysInClubApp, runClubBillingAction } from "@/lib/clubBillingApi.server";
+import { daysWord, describeFreeDates, parseFreeDaysRequest } from "@/lib/freeDays";
 import {
   CHANGE_TYPES, billingActionFor, decisionNoteRequired, type ChangeType, type PackageEditPayload, type PlanChangePayload,
   type SignupEditPayload, type SignupPreApprovePayload, type SignupRejectPayload,
@@ -29,6 +30,8 @@ export async function executeChange(
   payload: unknown,
   actor: Actor,
   note?: string,
+  // What makes a request happen once: an approved request's id, or a direct submission's own key (free days only).
+  key?: string,
 ): Promise<void> {
   const withNote = (text: string | null) => [text, note].filter(Boolean).join(" · ") || null;
 
@@ -147,6 +150,33 @@ export async function executeChange(
       return;
     }
 
+    case "FREE_DAYS": {
+      // Free service days: checked again here with the same rules, then the club app gives each club its days and emails its admins.
+      const checked = parseFreeDaysRequest(payload, new Date());
+      if (!checked.ok) throw new ChangeError(checked.error);
+      const request = checked.value;
+      let summary;
+      try {
+        summary = await applyFreeDaysInClubApp(key ?? `direct:${actor.id}:${Date.now()}`, request, actor, note ?? null);
+      } catch (e) {
+        throw new ChangeError(e instanceof Error ? e.message : "The club app couldn't give the free days", 502);
+      }
+      await recordAudit(actor, {
+        action: "free_days.sent",
+        targetType: "free_days",
+        targetId: summary.grantId,
+        targetLabel: request.title,
+        note: withNote(
+          `${daysWord(request.dates.length)} free (${describeFreeDates(request.dates)}) for ${summary.total} club${summary.total === 1 ? "" : "s"}: ${summary.applied} done, ${summary.failed} not done, ${summary.emailed} emailed${summary.emailProblems ? `, ${summary.emailProblems} with an email still to send` : ""}`,
+        ),
+      });
+      // Nothing worked at all (every club failed): the request is reported as approved but not applied, with the reason.
+      if (summary.total > 0 && summary.applied === 0 && summary.pending === 0) {
+        throw new ChangeError(`No club could be given the free days. ${summary.failures[0]?.clubName ? `${summary.failures[0].clubName}: ` : ""}${summary.failures[0]?.error ?? ""}`.trim(), 502);
+      }
+      return;
+    }
+
     default: {
       // Account hold, resume and cancel are done in Stripe by the club app.
       const action = billingActionFor(type);
@@ -177,11 +207,11 @@ export type SubmitResult = { done: true } | { requested: true; id: string };
  * caller just calls this.
  */
 export async function submitChange(
-  input: { type: ChangeType; clubId: string | null; payload: unknown; reason: string | null; targetLabel?: string },
+  input: { type: ChangeType; clubId: string | null; payload: unknown; reason: string | null; targetLabel?: string; key?: string },
   actor: Actor,
 ): Promise<SubmitResult> {
   if (canApproveChanges(actor.role)) {
-    await executeChange(input.type, input.clubId, input.payload, actor, input.reason ? `Reason: ${input.reason}` : undefined);
+    await executeChange(input.type, input.clubId, input.payload, actor, input.reason ? `Reason: ${input.reason}` : undefined, input.key);
     return { done: true };
   }
 
@@ -275,6 +305,7 @@ export async function decideChange(
       payload,
       actor,
       `Approved request from ${request.requestedByName}${request.reason ? ` (${request.type === "SIGNUP_PREAPPROVE" ? "notes" : "reason"}: ${request.reason})` : ""}${decisionNote ? ` · Admin's reason: ${decisionNote}` : ""}`,
+      `req:${request.id}`,
     );
   } catch (e) {
     const error = e instanceof Error ? e.message : "The change could not be applied";

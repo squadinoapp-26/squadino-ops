@@ -248,7 +248,36 @@ describe("decisionNoteRequired", () => {
     expect(decisionNoteRequired("SIGNUP_REJECT")).toBe(true);
     expect(decisionNoteRequired("SIGNUP_PREAPPROVE")).toBe(true);
     expect(decisionNoteRequired("SIGNUP_EDIT")).toBe(true);
+    expect(decisionNoteRequired("FREE_DAYS")).toBe(true); // free days go to customers: an admin always says why
     expect(decisionNoteRequired("PLAN_CHANGE")).toBe(false);
     expect(decisionNoteRequired("HOLD_START")).toBe(false);
+  });
+});
+
+describe("giving clubs free days (FREE_DAYS)", () => {
+  const payload = {
+    title: "Service interruption on 3 November",
+    whatHappened: "Our database provider had an outage.",
+    whatWeAreDoing: "We added a second region.",
+    extraNote: null,
+    dates: ["2026-11-03", "2026-11-04", "2026-11-05"],
+    clubs: [{ id: "c1", name: "Otters FC" }, { id: "c2", name: "Lions" }],
+  };
+
+  it("is a known change type with its own wording", () => {
+    expect(isChangeType("FREE_DAYS")).toBe(true);
+    expect(billingActionFor("FREE_DAYS")).toBeNull(); // not a Stripe action started from one club: it has its own route
+    expect(requestStatusLabel("FREE_DAYS", "APPROVED")).toBe("Approved: free days given");
+    expect(requestStatusLabel("FREE_DAYS", "REJECTED")).toBe("Rejected: no free days given");
+    expect(requestStatusLabel("FREE_DAYS", "PENDING")).toBe("Waiting for approval");
+  });
+
+  it("describes what approving would do, with the days and the number of clubs", () => {
+    const line = describeChange("FREE_DAYS", payload);
+    expect(line).toContain("2 clubs");
+    expect(line).toContain("3 days");
+    expect(line).toContain("3 to 5 November 2026");
+    expect(describeChange("FREE_DAYS", { ...payload, clubs: [payload.clubs[0]], dates: ["2026-11-03"] })).toContain("1 club 1 day");
+    expect(() => describeChange("FREE_DAYS", null)).not.toThrow();
   });
 });

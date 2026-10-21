@@ -140,6 +140,13 @@ export function canEditSignups(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);
 }
 
+// Free service days (compensation when Squadino was unavailable): everyone who can sign in prepares one; an admin makes it directly (always
+// with a written reason) and everyone else sends it for an admin to approve (type FREE_DAYS, see changeRequests.server.ts). Finishing one
+// that was left half done is the same group as canApproveChanges.
+export function canPrepareFreeDays(role: string | null | undefined) {
+  return !!role && ["SUPER_ADMIN", "ADMIN", "MODERATOR", "CUSTOMER_CARE"].includes(role);
+}
+
 // Reading the change Logs.
 export function canViewLogs(role: string | null | undefined) {
   return !!role && ["SUPER_ADMIN", "ADMIN"].includes(role);

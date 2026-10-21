@@ -4,6 +4,7 @@ import { requirePlatformSessionOrRedirect, canApproveChanges } from "@/lib/auth"
 import { isMissingTable } from "@/lib/prismaErrors";
 import { CHANGE_TYPES, REQUEST_STATUS_LABELS, describeChange, isChangeType, requestStatusLabel } from "@/lib/changeRequests";
 import ApprovalActions from "./ApprovalActions";
+import FreeDaysRequestDetails from "@/components/FreeDaysRequestDetails";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,7 @@ export default async function ApprovalsPage() {
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_TONE.PENDING}`}>{REQUEST_STATUS_LABELS.PENDING}</span>
               </div>
               <p className="text-xs text-slate-500 mt-2">{`Asked by ${r.requestedByName} · ${when.format(r.createdAt)}`}</p>
+              {r.type === "FREE_DAYS" && <FreeDaysRequestDetails payload={r.payload} />}
               {r.reason && <p className="text-sm text-slate-300 mt-2">{`${r.type === "SIGNUP_PREAPPROVE" ? "Notes" : "Reason"}: ${r.reason}`}</p>}
               {canDecide ? <ApprovalActions id={r.id} type={r.type} /> :<p className="text-xs text-slate-500 mt-3">An admin will review this.</p>}
             </div>

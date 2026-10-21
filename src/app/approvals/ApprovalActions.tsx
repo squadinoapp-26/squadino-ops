@@ -9,7 +9,8 @@ export default function ApprovalActions({ id, type }: { id: string; type?: strin
   const signupReject = type === "SIGNUP_REJECT";
   const preapprove = type === "SIGNUP_PREAPPROVE";
   const signupEdit = type === "SIGNUP_EDIT";
-  const noteRequired = signupReject || preapprove || signupEdit;
+  const freeDays = type === "FREE_DAYS";
+  const noteRequired = signupReject || preapprove || signupEdit || freeDays;
   const router = useRouter();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
@@ -41,7 +42,7 @@ export default function ApprovalActions({ id, type }: { id: string; type?: strin
       <div className="flex gap-3">
         <button type="button" onClick={() => decide("approve")} disabled={busy !== null || (noteRequired && !note.trim())}
           className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
-          {busy === "approve" ? "Approving…" : signupReject ? "Approve rejection" : preapprove ? "Approve & create club" : signupEdit ? "Approve correction" : "Approve and apply"}
+          {busy === "approve" ? "Approving…" : signupReject ? "Approve rejection" : preapprove ? "Approve & create club" : signupEdit ? "Approve correction" : freeDays ? "Approve and give the free days" : "Approve and apply"}
         </button>
         <button type="button" onClick={() => decide("reject")} disabled={busy !== null || (noteRequired && !note.trim())}
           className="bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
