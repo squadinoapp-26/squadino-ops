@@ -98,13 +98,31 @@ describe("rejecting a signup (SIGNUP_REJECT)", () => {
   });
 
   it("needs a written reason, tidied and capped", () => {
-    expect(parseSignupReject("s1", "  Looks like a duplicate  ")).toEqual({ ok: true, payload: { signupId: "s1", reason: "Looks like a duplicate" } });
+    expect(parseSignupReject("s1", "  Looks like a duplicate  ")).toEqual({ ok: true, payload: { signupId: "s1", reason: "Looks like a duplicate", customerMessage: null, emailCustomer: true } });
     expect(parseSignupReject("s1", "").ok).toBe(false);
     expect(parseSignupReject("s1", "   ").ok).toBe(false);
     expect(parseSignupReject("s1", undefined).ok).toBe(false);
     expect(parseSignupReject("s1", 42).ok).toBe(false);
     const long = parseSignupReject("s1", "x".repeat(REASON_MAX + 50));
     expect(long.ok && long.payload.reason).toHaveLength(REASON_MAX);
+  });
+
+  it("emails the customer unless that is switched off, with an optional message of its own (the staff reason is never the message)", () => {
+    const withMessage = parseSignupReject("s1", "Looks fake", { customerMessage: "  We've cancelled your card.  " });
+    expect(withMessage.ok && withMessage.payload).toEqual({ signupId: "s1", reason: "Looks fake", customerMessage: "We've cancelled your card.", emailCustomer: true });
+    // Switched off: nobody is emailed, so any message typed before unticking is dropped rather than kept.
+    const off = parseSignupReject("s1", "test signup", { customerMessage: "hello", emailCustomer: false });
+    expect(off.ok && off.payload).toEqual({ signupId: "s1", reason: "test signup", customerMessage: null, emailCustomer: false });
+    expect(parseSignupReject("s1", "x", { customerMessage: 5 }).ok).toBe(true);
+    expect(parseSignupReject("s1", "x", { customerMessage: "y".repeat(1001) }).ok).toBe(false);
+  });
+
+  it("tells the approving admin whether the customer will be emailed, and with what", () => {
+    expect(describeChange("SIGNUP_REJECT", { signupId: "s1", reason: "x", emailCustomer: true, customerMessage: "Sorry about that." })).toContain('The customer will be emailed that we can\'t set up their account, with your message: "Sorry about that."');
+    expect(describeChange("SIGNUP_REJECT", { signupId: "s1", reason: "x", emailCustomer: true, customerMessage: null })).toContain("no message from you");
+    expect(describeChange("SIGNUP_REJECT", { signupId: "s1", reason: "x", emailCustomer: false })).toContain("will not be emailed");
+    // A request made before this existed says nobody is emailed, which is what happens.
+    expect(describeChange("SIGNUP_REJECT", { signupId: "s1", reason: "x" })).toContain("will not be emailed");
   });
 
   it("words the outcome as re-instated when an admin turns the request down", () => {

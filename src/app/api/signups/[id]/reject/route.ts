@@ -17,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Only platform staff can reject signups." }, { status: 403 });
   }
   const body = await req.json().catch(() => ({}));
-  const parsed = parseSignupReject(id, body?.reason);
+  const parsed = parseSignupReject(id, body?.reason, { customerMessage: body?.customerMessage, emailCustomer: body?.emailCustomer });
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const signup = await prisma.signupRequest.findUnique({ where: { id }, select: { clubName: true, status: true } });

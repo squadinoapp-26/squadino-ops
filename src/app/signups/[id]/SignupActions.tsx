@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { normaliseSubdomain, subdomainProblem, type SubdomainSuggestion } from "@/lib/subdomain";
 import WebAddressSuggestions from "@/components/WebAddressSuggestions";
+import { CUSTOMER_MESSAGE_MAX } from "@/lib/signupRejectedEmail";
 
 // Super admins and admins approve or reject here and now, and always say why. Everyone else (moderators, customer
 // care) can only PRE-APPROVE (optional notes) or ask for a rejection (a reason is required): both go to an admin.
@@ -35,6 +36,9 @@ export default function SignupActions({
   const [error, setError] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  // Rejecting emails the customer unless this is switched off; the message is optional and is the only part of the reason they see.
+  const [emailCustomer, setEmailCustomer] = useState(true);
+  const [customerMessage, setCustomerMessage] = useState("");
   // An admin's reason for approving (required) or a pre-approver's notes for the admin (optional).
   const [approveText, setApproveText] = useState("");
 
@@ -71,7 +75,7 @@ export default function SignupActions({
     const res = await fetch(`/api/signups/${id}/reject`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, emailCustomer, customerMessage }),
     });
     if (res.ok) {
       router.push("/signups");
@@ -150,7 +154,9 @@ export default function SignupActions({
               ? "This rejects the signup straight away. It is then listed under Rejected clubs on the dashboard, where it can be re-instated."
               : "This does not reject the signup yet. Your reason goes to an admin, who approves the rejection or re-instates the signup."}
           </p>
+          <label htmlFor="reject-reason" className="block text-xs uppercase tracking-wide text-slate-500">Reason (for staff only, never shown to the customer)</label>
           <textarea
+            id="reject-reason"
             value={reason}
             onChange={(e) => { setReason(e.target.value); setError(""); }}
             placeholder="Why is this signup being rejected? (required, recorded with your name)"
@@ -158,6 +164,25 @@ export default function SignupActions({
             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm"
             rows={3}
           />
+          <label className="flex items-start gap-2 text-sm text-slate-200">
+            <input type="checkbox" className="mt-1" checked={emailCustomer} onChange={(e) => setEmailCustomer(e.target.checked)} />
+            <span>Email the customer that we can&apos;t set up their account. Untick this for a test signup.</span>
+          </label>
+          {emailCustomer && (
+            <div>
+              <label htmlFor="reject-message" className="block text-xs uppercase tracking-wide text-slate-500 mb-1">Message to the customer (optional)</label>
+              <textarea
+                id="reject-message"
+                value={customerMessage}
+                onChange={(e) => setCustomerMessage(e.target.value)}
+                placeholder="For example: the card you entered has been cancelled, so nothing will be taken."
+                maxLength={CUSTOMER_MESSAGE_MAX}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm"
+                rows={3}
+              />
+              <p className="text-xs text-slate-500 mt-1">{isAdmin ? "The customer gets a short, polite email with this message in it." : "An admin sees this message when they decide, and the customer is emailed only if they approve the rejection."}</p>
+            </div>
+          )}
           <div className="flex gap-3">
             <button
               onClick={reject}

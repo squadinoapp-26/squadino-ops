@@ -5,6 +5,7 @@
 import { diffFields, formatAuditValue, type AuditChange } from "@/lib/auditLog";
 import { parseSignupEdit, signupEditSnapshot, SIGNUP_EDIT_FIELDS, type SignupEditData } from "@/lib/signupEdit";
 import { daysWord, describeFreeDates, type FreeDaysRequest } from "@/lib/freeDays";
+import { CUSTOMER_MESSAGE_MAX } from "@/lib/signupRejectedEmail";
 
 export const CHANGE_TYPES = {
   PLAN_CHANGE: "Change plan or user limit",
@@ -61,7 +62,12 @@ export interface PackageEditPayload {
 
 export interface SignupRejectPayload {
   signupId: string;
+  // The staff reason: private, never shown to the customer.
   reason: string;
+  // What the admin chose to tell the customer in the rejection email (optional), and whether the customer is emailed at all. A request
+  // made before this existed has neither, and then nobody is emailed: only an explicit `true` sends.
+  customerMessage?: string | null;
+  emailCustomer?: boolean;
 }
 
 export interface SignupPreApprovePayload {
@@ -131,11 +137,17 @@ export function signupEditChanges(payload: unknown): AuditChange[] {
   return diffFields(p.before, p.data, SIGNUP_EDIT_FIELDS);
 }
 
-/** Rejecting a signup always needs a written reason, so an admin can judge it. */
-export function parseSignupReject(signupId: string, reasonInput: unknown): Parsed<SignupRejectPayload> {
+/**
+ * Rejecting a signup always needs a written reason, so an admin can judge it. The customer is emailed unless the reviewer switches that
+ * off (the box starts ticked); the optional message is what the customer is told, and the staff reason is never part of it.
+ */
+export function parseSignupReject(signupId: string, reasonInput: unknown, extra: { customerMessage?: unknown; emailCustomer?: unknown } = {}): Parsed<SignupRejectPayload> {
   const reason = cleanReason(reasonInput);
   if (!reason) return { ok: false, error: "Give a reason for rejecting this signup." };
-  return { ok: true, payload: { signupId, reason } };
+  const message = typeof extra.customerMessage === "string" ? extra.customerMessage.trim() : "";
+  if (message.length > CUSTOMER_MESSAGE_MAX) return { ok: false, error: `The message to the customer can be up to ${CUSTOMER_MESSAGE_MAX} characters.` };
+  const emailCustomer = extra.emailCustomer !== false;
+  return { ok: true, payload: { signupId, reason, customerMessage: emailCustomer && message ? message : null, emailCustomer } };
 }
 
 /** A hold extension is 1 or 2 more months at the same price. */
@@ -210,8 +222,12 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       return "End the hold now: back to the plan and price it was on, with all features";
     case "SUBSCRIPTION_CANCEL":
       return "Cancel the subscription at the end of the period already paid for";
-    case "SIGNUP_REJECT":
-      return "Reject this new signup. Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review";
+    case "SIGNUP_REJECT": {
+      const told = p.emailCustomer === true
+        ? `The customer will be emailed that we can't set up their account${typeof p.customerMessage === "string" && p.customerMessage ? `, with your message: "${p.customerMessage}"` : " (no message from you)"}.`
+        : "The customer will not be emailed.";
+      return `Reject this new signup. ${told} Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review`;
+    }
     case "SIGNUP_EDIT": {
       const changes = signupEditChanges(payload);
       const list = changes.map((c) => `${c.label}: ${formatAuditValue(c.from)} → ${formatAuditValue(c.to)}`).join("; ");

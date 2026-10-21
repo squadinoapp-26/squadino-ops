@@ -6,6 +6,8 @@ import { recordAudit } from "@/lib/auditLog.server";
 import { isMissingTable } from "@/lib/prismaErrors";
 import { applyFreeDaysInClubApp, runClubBillingAction } from "@/lib/clubBillingApi.server";
 import { daysWord, describeFreeDates, parseFreeDaysRequest } from "@/lib/freeDays";
+import { sendEmail } from "@/lib/email";
+import { signupRejectedEmail } from "@/lib/signupRejectedEmail";
 import {
   CHANGE_TYPES, billingActionFor, decisionNoteRequired, type ChangeType, type PackageEditPayload, type PlanChangePayload,
   type SignupEditPayload, type SignupPreApprovePayload, type SignupRejectPayload,
@@ -92,7 +94,7 @@ export async function executeChange(
 
     case "SIGNUP_REJECT": {
       const p = payload as SignupRejectPayload;
-      const signup = await prisma.signupRequest.findUnique({ where: { id: p.signupId }, select: { id: true, clubName: true } });
+      const signup = await prisma.signupRequest.findUnique({ where: { id: p.signupId }, select: { id: true, clubName: true, contactName: true, contactEmail: true } });
       if (!signup) throw new ChangeError("Signup not found", 404);
       // Only a signup nobody has reviewed yet can be rejected; the status in the filter stops two people
       // (or a request and an approval) from deciding the same signup at once.
@@ -101,12 +103,28 @@ export async function executeChange(
         data: { status: "REJECTED", reviewedAt: new Date(), reviewedByPlatformUserId: actor.id, rejectionReason: p.reason },
       });
       if (done.count === 0) throw new ChangeError("This signup has already been reviewed.", 409);
+
+      // The customer is told, once, now that the rejection is final (never when a moderator only asks for it). Only an explicit `true` sends,
+      // so a request made before this existed emails nobody. A failure to send never undoes the rejection; it is written in the Logs.
+      let customerNote = "Customer not emailed";
+      if (p.emailCustomer === true) {
+        if (!signup.contactEmail.includes("@")) {
+          customerNote = "Customer NOT emailed: the signup has no usable email address";
+        } else {
+          const sent = await sendEmail({ ...signupRejectedEmail({ clubName: signup.clubName, contactName: signup.contactName, message: p.customerMessage }), to: signup.contactEmail });
+          customerNote = sent.error
+            ? `Customer email could NOT be sent (${sent.error})`
+            : !sent.delivered
+              ? "Customer email was not sent (no mail provider is set up)"
+              : `Customer emailed${p.customerMessage ? ` with this message: ${p.customerMessage.slice(0, 300)}` : " (standard message)"}`;
+        }
+      }
       await recordAudit(actor, {
         action: "signup.reject",
         targetType: "signup",
         targetId: signup.id,
         targetLabel: signup.clubName,
-        note: withNote(null) ?? `Reason: ${p.reason}`,
+        note: `${withNote(null) ?? `Reason: ${p.reason}`} · ${customerNote}`,
       });
       return;
     }
