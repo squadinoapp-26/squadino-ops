@@ -697,6 +697,62 @@ model ClubBilling {
   @@map("club_billing")
 }
 
+// Free service days: platform staff give clubs free days to make up for time Squadino was unavailable (owner, 2026-10-21).
+// One row here per approved request: what was said to the customers (what happened, what Squadino is doing about it) and the
+// days that are free. Each club it applies to has a row in free_days_grant_clubs. Kept in separate tables, like staff_colors, so
+// code that reads them still deploys before the database update; never deleted (the apps have no way to do it).
+model FreeDaysGrant {
+  id             String              @id @default(cuid())
+  // One per approved request (or per direct submission by an admin): a double click or a retried approval finds the
+  // same grant instead of giving the days twice.
+  key            String              @unique
+  title          String
+  // The admin's words, sent to each club's admins: why it happened, what Squadino is doing to fix it, and an optional extra line.
+  whatHappened   String
+  whatWeAreDoing String
+  extraNote      String?
+  // The free days as YYYY-MM-DD, earliest first, and how many there are.
+  freeDates      String[]
+  dayCount       Int
+  // Who made it (an admin) or approved it (a request from a moderator or customer care), with the note recorded in the Logs.
+  approvedByName String
+  approvedByRole String
+  note           String?
+  createdAt      DateTime            @default(now())
+  clubs          FreeDaysGrantClub[]
+
+  @@map("free_days_grants")
+}
+
+// What happened for ONE club in a grant. No foreign key to clubs on purpose: the history stays if a club is ever deleted.
+model FreeDaysGrantClub {
+  id         String        @id @default(cuid())
+  grantId    String
+  grant      FreeDaysGrant @relation(fields: [grantId], references: [id])
+  clubId     String
+  clubName   String
+  // PENDING (not done yet), APPLIED (the billing change is made) or FAILED (see error). The email is tracked separately below.
+  status     String        @default("PENDING")
+  // STRIPE (the next payment moved out), TRIAL (the free trial's end moved out) or NONE (nothing to move, recorded only).
+  effect     String?
+  error      String?
+  // The payment (or trial end) date before and after, kept so a retry can tell the change already happened.
+  oldDate    DateTime?
+  newDate    DateTime?
+  appliedAt  DateTime?
+  emailedTo  String[]      @default([])
+  emailedAt  DateTime?
+  emailError String?
+  // Set while one worker is on this club, so two retries can't act on it at once.
+  claimedAt  DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([grantId, clubId])
+  @@index([grantId, status])
+  @@map("free_days_grant_clubs")
+}
+
 // A club admin's request for a pack of extra members (25, 50 or 100) once the club is full. Nothing
 // changes until platform staff approve it in the ops app: approving adds the extra members to the club's
 // Stripe subscription (billed per member, per month) and from then on they count towards the club's member

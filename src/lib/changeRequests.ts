@@ -4,6 +4,8 @@
 
 import { diffFields, formatAuditValue, type AuditChange } from "@/lib/auditLog";
 import { parseSignupEdit, signupEditSnapshot, SIGNUP_EDIT_FIELDS, type SignupEditData } from "@/lib/signupEdit";
+import { daysWord, describeFreeDates, type FreeDaysRequest } from "@/lib/freeDays";
+import { CUSTOMER_MESSAGE_MAX } from "@/lib/signupRejectedEmail";
 
 export const CHANGE_TYPES = {
   PLAN_CHANGE: "Change plan or user limit",
@@ -15,6 +17,7 @@ export const CHANGE_TYPES = {
   SIGNUP_REJECT: "Reject a new signup",
   SIGNUP_PREAPPROVE: "Pre-approve a new signup",
   SIGNUP_EDIT: "Correct a new signup's details",
+  FREE_DAYS: "Give clubs free days",
 } as const;
 
 export type ChangeType = keyof typeof CHANGE_TYPES;
@@ -59,7 +62,12 @@ export interface PackageEditPayload {
 
 export interface SignupRejectPayload {
   signupId: string;
+  // The staff reason: private, never shown to the customer.
   reason: string;
+  // What the admin chose to tell the customer in the rejection email (optional), and whether the customer is emailed at all. A request
+  // made before this existed has neither, and then nobody is emailed: only an explicit `true` sends.
+  customerMessage?: string | null;
+  emailCustomer?: boolean;
 }
 
 export interface SignupPreApprovePayload {
@@ -78,9 +86,13 @@ export interface SignupEditPayload {
   before: SignupEditData;
 }
 
-// All three signup requests are decided by an admin, who always gives a written reason, approving or not.
+// What a request for free service days holds: exactly what the customers would be told and the clubs they would go to, as written when
+// it was asked for, so the admin approves what will be sent. Same shape the club app checks again before doing it.
+export type FreeDaysPayload = FreeDaysRequest;
+
+// The signup requests and free days are decided by an admin, who always gives a written reason, approving or not.
 export function decisionNoteRequired(type: string): boolean {
-  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT";
+  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT" || type === "FREE_DAYS";
 }
 
 type Parsed<T> = { ok: true; payload: T } | { ok: false; error: string };
@@ -125,11 +137,17 @@ export function signupEditChanges(payload: unknown): AuditChange[] {
   return diffFields(p.before, p.data, SIGNUP_EDIT_FIELDS);
 }
 
-/** Rejecting a signup always needs a written reason, so an admin can judge it. */
-export function parseSignupReject(signupId: string, reasonInput: unknown): Parsed<SignupRejectPayload> {
+/**
+ * Rejecting a signup always needs a written reason, so an admin can judge it. The customer is emailed unless the reviewer switches that
+ * off (the box starts ticked); the optional message is what the customer is told, and the staff reason is never part of it.
+ */
+export function parseSignupReject(signupId: string, reasonInput: unknown, extra: { customerMessage?: unknown; emailCustomer?: unknown } = {}): Parsed<SignupRejectPayload> {
   const reason = cleanReason(reasonInput);
   if (!reason) return { ok: false, error: "Give a reason for rejecting this signup." };
-  return { ok: true, payload: { signupId, reason } };
+  const message = typeof extra.customerMessage === "string" ? extra.customerMessage.trim() : "";
+  if (message.length > CUSTOMER_MESSAGE_MAX) return { ok: false, error: `The message to the customer can be up to ${CUSTOMER_MESSAGE_MAX} characters.` };
+  const emailCustomer = extra.emailCustomer !== false;
+  return { ok: true, payload: { signupId, reason, customerMessage: emailCustomer && message ? message : null, emailCustomer } };
 }
 
 /** A hold extension is 1 or 2 more months at the same price. */
@@ -204,12 +222,21 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       return "End the hold now: back to the plan and price it was on, with all features";
     case "SUBSCRIPTION_CANCEL":
       return "Cancel the subscription at the end of the period already paid for";
-    case "SIGNUP_REJECT":
-      return "Reject this new signup. Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review";
+    case "SIGNUP_REJECT": {
+      const told = p.emailCustomer === true
+        ? `The customer will be emailed that we can't set up their account${typeof p.customerMessage === "string" && p.customerMessage ? `, with your message: "${p.customerMessage}"` : " (no message from you)"}.`
+        : "The customer will not be emailed.";
+      return `Reject this new signup. ${told} Approve it and the signup is rejected; re-instate it and it goes back to the signups waiting for review`;
+    }
     case "SIGNUP_EDIT": {
       const changes = signupEditChanges(payload);
       const list = changes.map((c) => `${c.label}: ${formatAuditValue(c.from)} → ${formatAuditValue(c.to)}`).join("; ");
       return `${list ? `Correct this new signup's details (${list}). ` : "Correct this new signup's details. "}Approve it and the signup is changed; decline it and nothing changes`;
+    }
+    case "FREE_DAYS": {
+      const dates = Array.isArray(p.dates) ? (p.dates as string[]) : [];
+      const clubs = Array.isArray(p.clubs) ? p.clubs.length : 0;
+      return `Give ${clubs} club${clubs === 1 ? "" : "s"} ${daysWord(dates.length)} free (${describeFreeDates(dates)}): each paying club's next payment moves out by that many days, a club on a free trial has its trial extended, and each club's admins are emailed the reason. Approve it and it is done and the emails go out; reject it and nothing changes`;
     }
     case "SIGNUP_PREAPPROVE":
       return `Create the club for this new signup${typeof p.slug === "string" && p.slug ? ` at ${p.slug}.squadino.com` : ""}. Approve it and the club is created; send it back and the signup returns to the signups waiting for review`;
@@ -232,6 +259,10 @@ export function requestStatusLabel(type: string, status: string): string {
   if (type === "SIGNUP_PREAPPROVE") {
     if (status === "APPROVED") return "Approved: club created";
     if (status === "REJECTED") return "Sent back for review";
+  }
+  if (type === "FREE_DAYS") {
+    if (status === "APPROVED") return "Approved: free days given";
+    if (status === "REJECTED") return "Rejected: no free days given";
   }
   if (type === "SIGNUP_EDIT") {
     if (status === "APPROVED") return "Approved: details corrected";

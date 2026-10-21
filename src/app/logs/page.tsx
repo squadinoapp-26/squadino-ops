@@ -224,7 +224,7 @@ function TargetName({ row, live }: { row: AuditLogRow; live: Set<string> }) {
   const href = row.targetId && live.has(row.targetId)
     ? row.targetType === "signup" ? `/signups/${row.targetId}` : row.targetType === "club" ? `/clubs/${row.targetId}` : null
     : null;
-  const kind = { signup: "signup", club: "club", sport: "sport", word: "restricted word", staff: "portal user" }[row.targetType] ?? row.targetType;
+  const kind = { signup: "signup", club: "club", sport: "sport", word: "restricted word", staff: "portal user", free_days: "free days" }[row.targetType] ?? row.targetType;
   return (
     <>
       {href ? <Link href={href} className="text-blue-400 hover:underline">{row.targetLabel}</Link> : <span>{row.targetLabel}</span>}

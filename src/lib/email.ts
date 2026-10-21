@@ -17,6 +17,8 @@ export interface OutgoingEmail {
   subject: string;
   text: string;
   html?: string;
+  // When set, replies go here instead of MAIL_FROM (same as the club app's email.ts).
+  replyTo?: string;
 }
 
 export interface SendResult {
@@ -65,6 +67,7 @@ export async function sendEmail(original: OutgoingEmail): Promise<SendResult> {
         subject: msg.subject,
         text: msg.text,
         ...(msg.html ? { html: msg.html } : {}),
+        ...(msg.replyTo ? { reply_to: msg.replyTo } : {}),
       }),
     });
 

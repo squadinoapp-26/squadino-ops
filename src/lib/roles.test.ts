@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canApproveChanges, canManagePackages, canReviewSignups, canManageSportsList, canEditSignups, canViewLogs, canManageClubStatus, canManageRestrictedWords, canManageStaff } from "./auth";
+import { canApproveChanges, canManagePackages, canReviewSignups, canManageSportsList, canEditSignups, canViewLogs, canManageClubStatus, canManageRestrictedWords, canManageStaff, canPrepareFreeDays } from "./auth";
 
 describe("canReviewSignups", () => {
   it("lets everyone who can sign in approve signups and set clubs up (everyday work)", () => {
@@ -86,5 +86,14 @@ describe("canApproveChanges / canManagePackages", () => {
   it("refuses when nobody is signed in", () => {
     expect(canApproveChanges(null)).toBe(false);
     expect(canApproveChanges(undefined)).toBe(false);
+  });
+});
+
+describe("canPrepareFreeDays", () => {
+  it("lets every kind of staff prepare free days (an admin gives them, everyone else sends them for approval), and nobody else", () => {
+    for (const role of ["SUPER_ADMIN", "ADMIN", "MODERATOR", "CUSTOMER_CARE"]) expect(canPrepareFreeDays(role)).toBe(true);
+    expect(canPrepareFreeDays("CLUB_ADMIN")).toBe(false);
+    expect(canPrepareFreeDays(null)).toBe(false);
+    expect(canPrepareFreeDays(undefined)).toBe(false);
   });
 });

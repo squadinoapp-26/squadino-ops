@@ -51,6 +51,9 @@ export const AUDIT_ACTIONS = {
   "billing.ended": "Subscription ended (Stripe)",
   "billing.payment_failed": "Payment failed (Stripe)",
   "billing.recovered": "Payment recovered (Stripe)",
+  "billing.free_days": "Free days given to a club",
+  "free_days.sent": "Gave clubs free days (their admins were emailed)",
+  "free_days.retried": "Finished giving free days to clubs",
   "full.requested": "Asked for the Full package",
   "full.invoice_sent": "Sent a Full package invoice (Stripe)",
   "full.invoice_cancelled": "Cancelled a Full package invoice (Stripe)",
@@ -62,7 +65,7 @@ export const AUDIT_ACTIONS = {
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTIONS;
-export type AuditTargetType = "signup" | "club" | "sport" | "word" | "staff" | "package" | "request";
+export type AuditTargetType = "signup" | "club" | "sport" | "word" | "staff" | "package" | "request" | "free_days";
 
 export type AuditValue = string | number | boolean | string[] | null;
 
@@ -194,6 +197,7 @@ const TASK_GROUPS: Record<string, string> = {
   club: "Clubs (status, subdomain, setup email)",
   billing: "Billing and account hold",
   full: "Full package",
+  free_days: "Free service days",
   request: "Approval requests",
   package: "Settings",
   sport: "Settings",

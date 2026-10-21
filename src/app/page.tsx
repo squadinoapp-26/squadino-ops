@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges, canDecideExtraMembers, canManageFullPackage } from "@/lib/auth";
+import { requirePlatformSessionOrRedirect, PLATFORM_ROLE_LABELS, canManageStaff, canManageClients, canManagePackages, canViewLogs, canManageSportsList, canManageRestrictedWords, canManageClubStatus, canApproveChanges, canDecideExtraMembers, canManageFullPackage, canPrepareFreeDays } from "@/lib/auth";
 import AppConfigMenu from "@/components/AppConfigMenu";
 import { countPendingChanges } from "@/lib/changeRequests.server";
 import { canDeleteClub } from "@/lib/clubStatus";
@@ -153,6 +153,7 @@ export default async function OpsDashboard() {
             ...(canManageRestrictedWords(staff.role) ? [{ href: "/restricted-words", label: "Restricted words", desc: "Words blocked or held for review in every club" }] : []),
             ...(canViewLogs(staff.role) ? [{ href: "/logs", label: "Logs", desc: "Every change made in this portal" }] : []),
             ...(canManageStaff(staff.role) ? [{ href: "/app-management/staff", label: "Manage users", desc: "Who can sign in to this portal" }] : []),
+            ...(canPrepareFreeDays(staff.role) ? [{ href: "/free-days", label: "Free days", desc: "Compensate clubs with free days after an outage" }] : []),
             { href: "/approvals", label: "Approvals", desc: "Changes waiting for an admin to approve" },
             { href: "/app-management/packages", label: "Packages", desc: canManagePackages(staff.role) ? "Plans, prices and user limits" : "See plans, or ask for a price change" },
             { href: "/clubs", label: "Manage accounts", desc: "Every club account, with search" },
