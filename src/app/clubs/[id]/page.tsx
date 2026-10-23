@@ -12,12 +12,19 @@ import { canDeleteClub, deletableFrom, monthsBetween } from "@/lib/clubStatus";
 import { getDeactivationDates, isClubNeverUsed } from "@/lib/clubStatus.server";
 import { presenceFor } from "@/lib/presence";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import Link from "next/link";
 import ClubPlanEditor from "./ClubPlanEditor";
 import { approvedExtraMembersFor } from "@/lib/extraMembers.server";
 import ClubUrlEditor from "./ClubUrlEditor";
 import ClubUsersList from "./ClubUsersList";
 import SignOutButton from "@/components/SignOutButton";
+import { needsExclusiveAccess } from "@/lib/clubAccess";
+import { acquireClubAccess, readLiveHolder } from "@/lib/clubAccess.server";
+import ClubAccessKeeper from "./ClubAccessKeeper";
+import ClubBlocked from "./ClubBlocked";
+import ClubAccessEnded from "./ClubAccessEnded";
+import ClubPresencePanel from "./ClubPresencePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +34,24 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   const staff = await requirePlatformSessionOrRedirect();
   const { id } = await params;
   const { created } = await searchParams;
+
+  // One customer care officer or moderator at a time per club (owner, 2026-10-23; rules in clubAccess.ts). This comes BEFORE anything
+  // about the club is read, so a blocked officer is never sent the club's data, only its name and who is in. Admins always get in
+  // and never take the club; they are shown who else is in instead.
+  const head = await prisma.club.findUnique({ where: { id }, select: { name: true, code: true } });
+  if (!head) notFound();
+  let keeperViewId: string | null = null;
+  let presence: { enabled: boolean; holder: Awaited<ReturnType<typeof readLiveHolder>>["holder"] } | null = null;
+  if (needsExclusiveAccess(staff.role)) {
+    // The browser may fetch a link's page ahead of a click; that must not count as opening the club.
+    if ((await headers()).has("next-router-prefetch")) return <div className="min-h-screen bg-slate-900" />;
+    const access = await acquireClubAccess(staff, id);
+    if (access.state === "blocked") return <ClubBlocked clubId={id} clubName={head.name} clubCode={head.code} holder={access.holder} />;
+    if (access.state === "removed") return <ClubAccessEnded clubName={head.name} clubCode={head.code} by={access.by} minutesLeft={access.minutesLeft} />;
+    if (access.state === "mine") keeperViewId = access.viewId;
+  } else {
+    presence = await readLiveHolder(id);
+  }
 
   // Removed members don't count against a club's member limit (same rule as the club app).
   const [club, packages, memberCount, extraMembers] = await Promise.all([
@@ -86,6 +111,9 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-8">
+        {keeperViewId && <ClubAccessKeeper clubId={club.id} viewId={keeperViewId} />}
+        {presence && <ClubPresencePanel clubId={club.id} clubName={club.name} enabled={presence.enabled} holder={presence.holder} />}
+
         {created && (
           <div className="bg-green-900/40 border border-green-700 rounded-2xl p-4 text-sm text-green-200">
             <p className="font-semibold">Client created.</p>

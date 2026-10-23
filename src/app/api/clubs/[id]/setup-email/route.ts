@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendOwnerSetupEmails } from "@/lib/clubSetupEmails";
 import { getPlatformUser, canReviewSignups } from "@/lib/auth";
 import { recordAudit } from "@/lib/auditLog.server";
+import { assertClubAccess } from "@/lib/clubAccess.server";
 
 // The "Send setup email" button on /clubs/[id]: emails the club's
 // owner (any admin who has never signed in) a one-time link to set their
@@ -13,6 +14,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!canReviewSignups(actor?.role)) {
     return NextResponse.json({ error: "Only platform admins and moderators can send setup emails." }, { status: 403 });
   }
+  // One customer care officer or moderator at a time per club: an admin always passes (see clubAccess.ts).
+  const locked = await assertClubAccess(actor!, id);
+  if (locked) return locked;
 
   const club = await prisma.club.findUnique({
     where: { id },

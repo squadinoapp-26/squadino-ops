@@ -19,6 +19,7 @@ export const AUDIT_ACTIONS = {
   "club.delete": "Deleted club",
   "club.subdomain": "Set up subdomain",
   "club.setup_email": "Sent setup email",
+  "club.access_taken_over": "Took over a club account from another staff member",
   "sport.add": "Added sport",
   "sport.remove": "Removed sport",
   "word.add": "Added restricted word",

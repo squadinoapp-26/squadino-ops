@@ -5,6 +5,7 @@ import { ensureProjectDomain } from "@/lib/vercelDomains";
 import { sendSubdomainLiveEmails } from "@/lib/clubSetupEmails";
 import { getPlatformUser, canReviewSignups } from "@/lib/auth";
 import { recordAudit } from "@/lib/auditLog.server";
+import { assertClubAccess } from "@/lib/clubAccess.server";
 
 // The "Set up subdomain" button on /clubs/[id]: adds
 // {slug}.squadino.com to this app's Vercel project and, once Vercel reports
@@ -17,6 +18,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!canReviewSignups(actor?.role)) {
     return NextResponse.json({ error: "Only platform admins and moderators can set up subdomains." }, { status: 403 });
   }
+  // One customer care officer or moderator at a time per club: an admin always passes (see clubAccess.ts).
+  const locked = await assertClubAccess(actor!, id);
+  if (locked) return locked;
 
   const club = await prisma.club.findUnique({ where: { id }, select: { id: true, name: true, slug: true, subdomainReady: true } });
   if (!club) return NextResponse.json({ error: "Club not found" }, { status: 404 });
