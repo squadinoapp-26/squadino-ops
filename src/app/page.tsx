@@ -16,6 +16,8 @@ import ExtraMemberRequestsPanel from "@/components/ExtraMemberRequestsPanel";
 import FullPackageRequestsPanel from "@/components/FullPackageRequestsPanel";
 import { listOpenFullRequests } from "@/lib/fullPackage.server";
 import { listWaitingExtraMembers } from "@/lib/extraMembers.server";
+import EmailProblemsPanel from "@/components/EmailProblemsPanel";
+import { listRecentEmailProblems } from "@/lib/emailProblems.server";
 import { extraMembersMonthlyPrice } from "@/lib/extraMembers";
 import { listPendingSignupRequests } from "@/lib/signupReview.server";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
@@ -77,6 +79,8 @@ export default async function OpsDashboard() {
 
   // Clubs that used up their member limit and asked for more (admins and moderators decide).
   const extraMemberRequests = canDecideExtraMembers(staff.role) ? await listWaitingExtraMembers() : [];
+  // Emails the app could not send in the last week (the Logs' own readers only), so a mail problem is seen here and not by someone who never got an email.
+  const emailProblems = canViewLogs(staff.role) ? await listRecentEmailProblems().catch(() => ({ problems: [], total: 0 })) : { problems: [], total: 0 };
   // Requests for the Full package (more than 1,000 members, priced per member): admins and super admins only.
   const fullRequests = canManageFullPackage(staff.role) ? await listOpenFullRequests() : [];
 
@@ -234,6 +238,8 @@ export default async function OpsDashboard() {
           {rejectedPanel && (rejectedPanel.waiting.length > 0 || rejectedPanel.rejected.length > 0) && (
             <RejectedClubsPanel waiting={rejectedPanel.waiting} rejected={rejectedPanel.rejected} />
           )}
+
+          {emailProblems.total > 0 && <EmailProblemsPanel problems={emailProblems.problems} total={emailProblems.total} />}
 
           {billingAttention.length > 0 && (
             <div className="bg-slate-800 border border-amber-800/60 rounded-2xl p-5">
