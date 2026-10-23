@@ -11,6 +11,7 @@ import { canDeleteClub, deletableFrom } from "@/lib/clubStatus";
 import { getDeactivationDates, isClubNeverUsed } from "@/lib/clubStatus.server";
 import { removeProjectDomain } from "@/lib/vercelDomains";
 import { ROOT_DOMAIN } from "@/lib/hostClub";
+import { assertClubAccess } from "@/lib/clubAccess.server";
 
 // Club admin — package/user-cap (billing-adjacent, canManagePackages/SUPER_ADMIN
 // only) and the club's URL fields (subdomain slug, "subdomain is live", and its
@@ -22,6 +23,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!staff) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
+  // One customer care officer or moderator at a time per club: an admin always passes (see clubAccess.ts).
+  const locked = await assertClubAccess(staff, id);
+  if (locked) return locked;
   const body = await req.json().catch(() => ({}));
 
   // A plan or user-limit change is sensitive: anyone can ask, but only an admin makes it. A request

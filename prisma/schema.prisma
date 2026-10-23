@@ -697,6 +697,33 @@ model ClubBilling {
   @@map("club_billing")
 }
 
+// Who has a club's account open in the ops console right now (owner, 2026-10-23: customer care and moderators work on one club at a
+// time; admins can always open any club). One row per club while someone holds it; the row is removed when they leave. A hold counts only
+// while the browser keeps sending its heartbeat (lastBeatAt) AND the person has done something recently (lastActiveAt), so a closed or
+// crashed browser frees the club within minutes and a forgotten open page frees it after the idle limit. Ephemeral, so rows here ARE
+// deleted (unlike the review records). No foreign key to clubs on purpose, so deleting a club never trips over it. Separate table, like
+// staff_colors, so ops works before the database update (it then leaves everyone in and tells admins).
+model ClubAccessLock {
+  clubId       String   @id
+  staffId      String
+  staffName    String
+  staffRole    String
+  // One value per page the person has open (new each time the page is drawn). A page that is closing says "I've left" with its
+  // value, and it only frees the hold if that value is still the current one, so a reload (the old page leaving just as the new
+  // one arrives) can never free the hold of the page that replaced it.
+  viewId       String   @default("")
+  acquiredAt   DateTime @default(now())
+  lastBeatAt   DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+  // Set when an admin took the club over from this person. The row then stays as a note that they were put out: it holds nothing for
+  // anyone, but it keeps that same person from taking the club straight back (their page refreshes itself) for a while, and the page
+  // can say who ended it. The next person to open the club replaces it.
+  endedAt      DateTime?
+  endedByName  String?
+
+  @@map("club_access_locks")
+}
+
 // Free service days: platform staff give clubs free days to make up for time Squadino was unavailable (owner, 2026-10-21).
 // One row here per approved request: what was said to the customers (what happened, what Squadino is doing about it) and the
 // days that are free. Each club it applies to has a row in free_days_grant_clubs. Kept in separate tables, like staff_colors, so

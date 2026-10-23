@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePlatformSession } from "@/lib/auth";
+import { assertClubAccess } from "@/lib/clubAccess.server";
 import { submitChange, ChangeError } from "@/lib/changeRequests.server";
 import { cleanReason, parseExtension, type ChangeType } from "@/lib/changeRequests";
 
@@ -12,6 +13,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!staff) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
+  // One customer care officer or moderator at a time per club: an admin always passes (see clubAccess.ts).
+  const locked = await assertClubAccess(staff, id);
+  if (locked) return locked;
   const body = await req.json().catch(() => ({}));
   const type = typeof body?.action === "string" ? TYPES[body.action] : undefined;
   if (!type) return NextResponse.json({ error: "Choose hold, resume or cancel." }, { status: 400 });
