@@ -55,6 +55,19 @@ export async function approvedExtraMembersFor(clubId: string): Promise<number> {
 }
 
 /**
+ * How many approved extra-member rows the club has ever had (packs added and removals), 0 if none or the table isn't there yet. The club
+ * page keeps showing the extra-members box for a club that has had any, so its "removed" message isn't lost when the last extras go.
+ */
+export async function approvedExtraMemberRowsFor(clubId: string): Promise<number> {
+  try {
+    return await prisma.extraMemberRequest.count({ where: { clubId, status: "APPROVED" } });
+  } catch (e) {
+    if (isMissingTable(e)) return 0;
+    throw e;
+  }
+}
+
+/**
  * Approves or declines a club's request. The club app does the real work (adding the members to the club's
  * Stripe subscription, marking the request, emailing the club's admin); ops checks who is allowed, then
  * writes the Logs entry once the club app says it is done.

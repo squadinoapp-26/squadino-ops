@@ -6,6 +6,7 @@ import { diffFields, formatAuditValue, type AuditChange } from "@/lib/auditLog";
 import { parseSignupEdit, signupEditSnapshot, SIGNUP_EDIT_FIELDS, type SignupEditData } from "@/lib/signupEdit";
 import { daysWord, describeFreeDates, type FreeDaysRequest } from "@/lib/freeDays";
 import { CUSTOMER_MESSAGE_MAX } from "@/lib/signupRejectedEmail";
+import { extraMembersMonthlyPrice } from "@/lib/extraMembers";
 
 export const CHANGE_TYPES = {
   PLAN_CHANGE: "Change plan or user limit",
@@ -18,6 +19,7 @@ export const CHANGE_TYPES = {
   SIGNUP_PREAPPROVE: "Pre-approve a new signup",
   SIGNUP_EDIT: "Correct a new signup's details",
   FREE_DAYS: "Give clubs free days",
+  EXTRA_MEMBERS_REMOVE: "Remove extra members from a club",
 } as const;
 
 export type ChangeType = keyof typeof CHANGE_TYPES;
@@ -26,12 +28,9 @@ export function isChangeType(value: unknown): value is ChangeType {
   return typeof value === "string" && value in CHANGE_TYPES;
 }
 
-export const REASON_MAX = 500;
-
-/** A tidy optional reason, or null. */
-export function cleanReason(value: unknown): string | null {
-  return typeof value === "string" ? value.trim().slice(0, REASON_MAX) || null : null;
-}
+// Kept in its own small file so the pure helpers that need it (extraMembers.ts) don't import this big one back; re-exported for everyone else.
+export { REASON_MAX, cleanReason } from "@/lib/cleanReason";
+import { cleanReason } from "@/lib/cleanReason";
 
 /** The action the club app runs for the billing request types, or null for the others. */
 export function billingActionFor(type: ChangeType): "offer_hold" | "offer_extension" | "resume" | "cancel" | null {
@@ -44,6 +43,13 @@ export function billingActionFor(type: ChangeType): "offer_hold" | "offer_extens
 
 export interface ExtensionPayload {
   months: 1 | 2;
+}
+
+/** Taking extra members off a club: how many, whether Stripe credits the unused part of the period, and whether the club's admins are emailed. */
+export interface ExtraMembersRemovePayload {
+  members: number;
+  credit: boolean;
+  emailClub: boolean;
 }
 
 export interface PlanChangePayload {
@@ -90,9 +96,9 @@ export interface SignupEditPayload {
 // it was asked for, so the admin approves what will be sent. Same shape the club app checks again before doing it.
 export type FreeDaysPayload = FreeDaysRequest;
 
-// The signup requests and free days are decided by an admin, who always gives a written reason, approving or not.
+// The signup requests, free days and the removal of extra members are decided by an admin, who always gives a written reason, approving or not.
 export function decisionNoteRequired(type: string): boolean {
-  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT" || type === "FREE_DAYS";
+  return type === "SIGNUP_REJECT" || type === "SIGNUP_PREAPPROVE" || type === "SIGNUP_EDIT" || type === "FREE_DAYS" || type === "EXTRA_MEMBERS_REMOVE";
 }
 
 type Parsed<T> = { ok: true; payload: T } | { ok: false; error: string };
@@ -176,6 +182,23 @@ export function parsePlanChange(body: unknown): Parsed<PlanChangePayload> {
   return { ok: true, payload };
 }
 
+/**
+ * What staff sent to take extra members off a club, checked against how many it has now (the club app checks again when it does it).
+ * Everyone gives a written reason, since it lowers what the customer pays. Crediting the unused part of the period is on unless switched
+ * off; the club's admins are emailed only when staff explicitly ask for it.
+ */
+export function parseExtraMembersRemove(body: unknown, extrasNow: number): Parsed<ExtraMembersRemovePayload> {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const members = b.members;
+  if (typeof members !== "number" || !Number.isInteger(members) || members < 1) {
+    return { ok: false, error: "Say how many extra members to remove (a whole number, 1 or more)." };
+  }
+  if (extrasNow < 1) return { ok: false, error: "This club has no extra members to remove." };
+  if (members > extrasNow) return { ok: false, error: `This club has ${extrasNow} extra member${extrasNow === 1 ? "" : "s"}, so ${members} can't be removed.` };
+  if (!cleanReason(b.reason)) return { ok: false, error: "Give a reason for removing them; it goes in the Logs." };
+  return { ok: true, payload: { members, credit: b.credit !== false, emailClub: b.emailClub === true } };
+}
+
 /** A package's new name, price, user limit and trial: the same rules the package editor uses. */
 export function parsePackageEdit(packageId: string, body: unknown): Parsed<PackageEditPayload> {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
@@ -237,6 +260,10 @@ export function describeChange(type: ChangeType, payload: unknown, packageNames:
       const dates = Array.isArray(p.dates) ? (p.dates as string[]) : [];
       const clubs = Array.isArray(p.clubs) ? p.clubs.length : 0;
       return `Give ${clubs} club${clubs === 1 ? "" : "s"} ${daysWord(dates.length)} free (${describeFreeDates(dates)}): each paying club's next payment moves out by that many days, a club on a free trial has its trial extended, and each club's admins are emailed the reason. Approve it and it is done and the emails go out; reject it and nothing changes`;
+    }
+    case "EXTRA_MEMBERS_REMOVE": {
+      const members = typeof p.members === "number" ? p.members : 0;
+      return `Take ${members} extra member${members === 1 ? "" : "s"} off this club: the extra-members charge in Stripe goes down by ${extraMembersMonthlyPrice(members)} a month (${p.credit === false ? "nothing is credited for the current month" : "the unused part of the current month is credited"}), the club's member limit goes down by ${members}, and ${p.emailClub === true ? "the club's admins are emailed" : "nobody is emailed"}. Nobody already in the club is removed. Approve it and it is done; reject it and nothing changes`;
     }
     case "SIGNUP_PREAPPROVE":
       return `Create the club for this new signup${typeof p.slug === "string" && p.slug ? ` at ${p.slug}.squadino.com` : ""}. Approve it and the club is created; send it back and the signup returns to the signups waiting for review`;
