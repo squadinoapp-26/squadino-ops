@@ -4,12 +4,13 @@ import { canApproveChanges } from "@/lib/auth";
 import { diffFields } from "@/lib/auditLog";
 import { recordAudit } from "@/lib/auditLog.server";
 import { isMissingTable } from "@/lib/prismaErrors";
-import { applyFreeDaysInClubApp, runClubBillingAction } from "@/lib/clubBillingApi.server";
+import { ClubAppError, applyFreeDaysInClubApp, removeExtraMembersInClubApp, runClubBillingAction } from "@/lib/clubBillingApi.server";
+import { describeRemovalResult } from "@/lib/extraMembers";
 import { daysWord, describeFreeDates, parseFreeDaysRequest } from "@/lib/freeDays";
 import { sendEmail } from "@/lib/email";
 import { signupRejectedEmail } from "@/lib/signupRejectedEmail";
 import {
-  CHANGE_TYPES, billingActionFor, decisionNoteRequired, type ChangeType, type PackageEditPayload, type PlanChangePayload,
+  CHANGE_TYPES, billingActionFor, decisionNoteRequired, type ChangeType, type ExtraMembersRemovePayload, type PackageEditPayload, type PlanChangePayload,
   type SignupEditPayload, type SignupPreApprovePayload, type SignupRejectPayload,
 } from "@/lib/changeRequests";
 import { ChangeError } from "@/lib/changeError";
@@ -192,6 +193,31 @@ export async function executeChange(
       if (summary.total > 0 && summary.applied === 0 && summary.pending === 0) {
         throw new ChangeError(`No club could be given the free days. ${summary.failures[0]?.clubName ? `${summary.failures[0].clubName}: ` : ""}${summary.failures[0]?.error ?? ""}`.trim(), 502);
       }
+      return;
+    }
+
+    case "EXTRA_MEMBERS_REMOVE": {
+      // Extra members come off the club: the club app lowers the Stripe line and the club's member limit (and emails the club's admins if
+      // asked), once; ops writes the Logs entry from what it reports. Checked again there against what the club has now.
+      if (!clubId) throw new ChangeError("A club is required");
+      const p = payload as ExtraMembersRemovePayload;
+      const club = await prisma.club.findUnique({ where: { id: clubId }, select: { id: true, name: true } });
+      if (!club) throw new ChangeError("Club not found", 404);
+      let result;
+      try {
+        result = await removeExtraMembersInClubApp(clubId, p.members, actor, note ?? null, { credit: p.credit !== false, emailClub: p.emailClub === true });
+      } catch (e) {
+        if (e instanceof ClubAppError) throw new ChangeError(e.message, e.status >= 500 ? 502 : e.status);
+        throw e;
+      }
+      await recordAudit(actor, {
+        action: "billing.extra_members_removed",
+        targetType: "club",
+        targetId: clubId,
+        targetLabel: club.name,
+        changes: [{ field: "extraMembers", label: "Extra members", from: result.extrasNow + result.removed, to: result.extrasNow }],
+        note: withNote(describeRemovalResult(result, p.emailClub === true)),
+      });
       return;
     }
 

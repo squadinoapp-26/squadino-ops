@@ -15,7 +15,8 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import ClubPlanEditor from "./ClubPlanEditor";
-import { approvedExtraMembersFor } from "@/lib/extraMembers.server";
+import RemoveExtraMembersPanel from "./RemoveExtraMembersPanel";
+import { approvedExtraMembersFor, approvedExtraMemberRowsFor } from "@/lib/extraMembers.server";
 import ClubUrlEditor from "./ClubUrlEditor";
 import ClubUsersList from "./ClubUsersList";
 import SignOutButton from "@/components/SignOutButton";
@@ -54,7 +55,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
   }
 
   // Removed members don't count against a club's member limit (same rule as the club app).
-  const [club, packages, memberCount, extraMembers] = await Promise.all([
+  const [club, packages, memberCount, extraMembers, extraRows] = await Promise.all([
     prisma.club.findUnique({
       where: { id },
       include: {
@@ -72,6 +73,7 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
     prisma.package.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.user.count({ where: { clubId: id, status: { not: "REMOVED" } } }),
     approvedExtraMembersFor(id),
+    approvedExtraMemberRowsFor(id),
   ]);
 
   if (!club) notFound();
@@ -96,6 +98,9 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
       throw e;
     });
   const needsSetup = club.active && (!club.subdomainReady || pendingOwners.length > 0);
+  // The member limit as the club app works it out: the club's own override (or its package's cap) plus the extra members it has bought.
+  const baseCap = club.userCapOverride ?? packages.find((p) => p.id === club.packageId)?.userCap ?? null;
+  const limitNow = baseCap != null ? baseCap + extraMembers : null;
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -192,6 +197,17 @@ export default async function ClubDetailPage({ params, searchParams }: { params:
           extraMembers={extraMembers}
           needsApproval={!canManagePackages(staff.role)}
         />
+
+        {extraRows > 0 && (
+          <RemoveExtraMembersPanel
+            clubId={club.id}
+            clubName={club.name}
+            extraMembers={extraMembers}
+            memberCount={memberCount}
+            limitNow={limitNow}
+            needsApproval={!canApproveChanges(staff.role)}
+          />
+        )}
 
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
           <h2 className="font-semibold mb-4 text-slate-200">Recent Users</h2>

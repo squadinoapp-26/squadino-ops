@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   billingActionFor, cleanReason, describeChange, isChangeType, parseExtension, parsePackageEdit, parsePlanChange, parseSignupPreApprove, parseSignupReject,
-  parseSignupEditRequest, signupEditChanges, decisionNoteRequired, requestStatusLabel, REASON_MAX,
+  parseSignupEditRequest, signupEditChanges, decisionNoteRequired, requestStatusLabel, REASON_MAX, CHANGE_TYPES, parseExtraMembersRemove,
 } from "./changeRequests";
 import type { SignupEditData } from "./signupEdit";
 
@@ -297,5 +297,44 @@ describe("giving clubs free days (FREE_DAYS)", () => {
     expect(line).toContain("3 to 5 November 2026");
     expect(describeChange("FREE_DAYS", { ...payload, clubs: [payload.clubs[0]], dates: ["2026-11-03"] })).toContain("1 club 1 day");
     expect(() => describeChange("FREE_DAYS", null)).not.toThrow();
+  });
+});
+
+describe("removing extra members from a club", () => {
+  it("is a change type an admin makes directly and everyone else asks for", () => {
+    expect(isChangeType("EXTRA_MEMBERS_REMOVE")).toBe(true);
+    expect(CHANGE_TYPES.EXTRA_MEMBERS_REMOVE).toBe("Remove extra members from a club");
+    expect(billingActionFor("EXTRA_MEMBERS_REMOVE")).toBeNull(); // not one of the hold / resume / cancel actions
+  });
+
+  it("is decided by an admin who always gives a written reason", () => {
+    expect(decisionNoteRequired("EXTRA_MEMBERS_REMOVE")).toBe(true);
+  });
+
+  it("takes a whole number from 1 up to what the club has, with a reason", () => {
+    expect(parseExtraMembersRemove({ members: 25, reason: "Customer asked" }, 50)).toEqual({ ok: true, payload: { members: 25, credit: true, emailClub: false } });
+    expect(parseExtraMembersRemove({ members: 50, reason: "x", credit: false, emailClub: true }, 50)).toEqual({ ok: true, payload: { members: 50, credit: false, emailClub: true } });
+  });
+
+  it("emails the club only when asked, and credits unless switched off", () => {
+    const out = parseExtraMembersRemove({ members: 5, reason: "x", emailClub: "yes", credit: "no" }, 50);
+    expect(out).toEqual({ ok: true, payload: { members: 5, credit: true, emailClub: false } }); // only a real true / false counts
+  });
+
+  it("refuses a missing reason, a bad number, more than the club has, and a club with none", () => {
+    expect(parseExtraMembersRemove({ members: 5 }, 50)).toEqual({ ok: false, error: "Give a reason for removing them; it goes in the Logs." });
+    expect(parseExtraMembersRemove({ members: 5, reason: "   " }, 50).ok).toBe(false);
+    for (const bad of [0, -1, 2.5, "5", null, undefined, NaN]) expect(parseExtraMembersRemove({ members: bad, reason: "x" }, 50).ok, String(bad)).toBe(false);
+    expect(parseExtraMembersRemove({ members: 51, reason: "x" }, 50)).toEqual({ ok: false, error: "This club has 50 extra members, so 51 can't be removed." });
+    expect(parseExtraMembersRemove({ members: 1, reason: "x" }, 0)).toEqual({ ok: false, error: "This club has no extra members to remove." });
+    expect(parseExtraMembersRemove(null, 50).ok).toBe(false);
+  });
+
+  it("says what approving it would do", () => {
+    expect(describeChange("EXTRA_MEMBERS_REMOVE", { members: 25, credit: true, emailClub: true })).toBe(
+      "Take 25 extra members off this club: the extra-members charge in Stripe goes down by $12.50 a month (the unused part of the current month is credited), the club's member limit goes down by 25, and the club's admins are emailed. Nobody already in the club is removed. Approve it and it is done; reject it and nothing changes",
+    );
+    expect(describeChange("EXTRA_MEMBERS_REMOVE", { members: 1, credit: false, emailClub: false })).toContain("nothing is credited for the current month");
+    expect(describeChange("EXTRA_MEMBERS_REMOVE", { members: 1, credit: false, emailClub: false })).toContain("nobody is emailed");
   });
 });

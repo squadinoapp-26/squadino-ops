@@ -2,6 +2,7 @@
 // Stripe key and the rules for what each does to the club. Ops only asks, with the same shared
 // secret the website uses for provisioning.
 import type { FreeDaysRequest } from "@/lib/freeDays";
+import type { ExtraMembersRemovalResult } from "@/lib/extraMembers";
 
 export class ClubAppError extends Error {
   status: number;
@@ -68,6 +69,23 @@ export async function decideExtraMembersInClubApp(
     decidedByRole: by.role,
     note,
   });
+}
+
+// Taking extra members off a club: the club app lowers (or takes off) the extra-members line in Stripe, lowers the club's member limit by the
+// same number, and emails the club's admins if asked. Ops decides who may ask and writes the Logs entry from what comes back.
+export async function removeExtraMembersInClubApp(
+  clubId: string,
+  members: number,
+  by: { name: string; role: string },
+  note: string | null,
+  opts: { credit: boolean; emailClub: boolean },
+): Promise<ExtraMembersRemovalResult> {
+  const data = await callClubApp({
+    clubId, action: "remove_extra_members", members, decidedByName: by.name, decidedByRole: by.role, note, credit: opts.credit, emailAdmins: opts.emailClub,
+  });
+  const result = data.result as ExtraMembersRemovalResult | undefined;
+  if (!result || typeof result.removed !== "number") throw new ClubAppError("The club app didn't say what it did. Check the club's extra members before trying again.", 502);
+  return result;
 }
 
 // Free service days (compensation when Squadino was unavailable). The club app moves each club's next payment out, extends free trials
