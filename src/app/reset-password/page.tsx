@@ -9,15 +9,17 @@ function ResetInner() {
   const router = useRouter();
   const token = params.get("token") ?? "";
 
-  // null = still checking the link
-  const [valid, setValid] = useState<boolean | null>(null);
+  // null = still checking the link. With no token the link is invalid from the
+  // first render, so seed that directly rather than calling setValid() inside
+  // the effect (which triggers a cascading render — react-hooks/set-state-in-effect).
+  const [valid, setValid] = useState<boolean | null>(token ? null : false);
   const [form, setForm] = useState({ next: "", confirm: "" });
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!token) { setValid(false); return; }
+    if (!token) return;
     fetch(`/api/auth/reset-password?token=${encodeURIComponent(token)}`)
       .then(async (r) => setValid(r.ok ? (await r.json()).valid : false))
       .catch(() => setValid(false));

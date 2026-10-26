@@ -88,7 +88,7 @@ export default function ClubUrlEditor({
         {slugError && <p className="text-red-400 text-sm mt-1.5">{slugError}</p>}
         <p className="text-xs text-slate-500 mt-1.5">
           Add the matching DNS record + Vercel domain for <span className="font-mono">{slug || "…"}.squadino.com</span> before
-          turning "Subdomain is live" on below — otherwise members get bounced to a dead subdomain.
+          turning &ldquo;Subdomain is live&rdquo; on below — otherwise members get bounced to a dead subdomain.
         </p>
       </div>
 
@@ -96,7 +96,7 @@ export default function ClubUrlEditor({
         <div>
           <p className="text-sm font-medium text-slate-300">Subdomain is live</p>
           <p className="text-xs text-slate-500 mt-0.5">
-            Off = members always sign in at app.squadino.com. On = they're routed to their own subdomain.
+            Off = members always sign in at app.squadino.com. On = they&apos;re routed to their own subdomain.
           </p>
         </div>
         <button type="button" onClick={toggleReady} disabled={savingReady}
@@ -109,8 +109,8 @@ export default function ClubUrlEditor({
       <div className="pt-2 border-t border-slate-700">
         <label htmlFor="club-custom-domain" className="block text-sm font-medium text-slate-300 mb-1">Custom domain</label>
         <p className="text-xs text-slate-500 mb-2">
-          Optional. The club's own domain (e.g. a URL they already own) — always redirects to the subdomain above,
-          never serves the app directly. Leave blank if they're only using the squadino.com subdomain.
+          Optional. The club&apos;s own domain (e.g. a URL they already own) — always redirects to the subdomain above,
+          never serves the app directly. Leave blank if they&apos;re only using the squadino.com subdomain.
         </p>
         <div className="flex items-center gap-2">
           <input id="club-custom-domain" value={customDomain} onChange={(e) => setCustomDomain(e.target.value)}
