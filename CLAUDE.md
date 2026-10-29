@@ -38,7 +38,14 @@ MODERATOR, CUSTOMER_CARE — see `src/lib/auth.ts` (`can…` helpers, tested in 
    comment) and run `node node_modules/prisma/build/index.js generate`.
 4. **Some logic is copied from the club app and must stay in step by hand:**
    `src/lib/modules.ts` (plan → modules, from the club app's `src/lib/settings.ts`),
-   `src/lib/clubCreate.ts` (club creation), `src/lib/signupPackages.ts` (mirror of
+   `src/lib/clubCreate.ts` (club creation), `src/lib/merchDefaults.ts` (the three
+   starter merch delivery options — "Pick up at training", "Pickup from someone",
+   "Posted" — every new club is seeded with; mirror of the club app's
+   `DEFAULT_DELIVERY_OPTIONS` in `src/lib/merch.ts`. `seedDefaultDeliveryOptions`
+   is called after `prisma.club.create` in BOTH creation paths —
+   `clubCreate.ts` (signup approval) and `clubProvisioning.ts` (New Client) — best-effort
+   so it never blocks a club being made; a club edits/hides/deletes them in the club app),
+   `src/lib/signupPackages.ts` (mirror of
    `Website/src/lib/packages.ts` — `signupPackages.test.ts` has the expected values written
    out; change both together), `hostClub.ts`, `subdomain.ts` (also holds `suggestSubdomains`: the short web-address choices on the approve screen and New Client form, owner 2026-10-19, initials first; identical copy and tests in the club app), `sportCatalog.ts`,
    `restrictedWordsList.ts`, and `welcomeEmail` in `src/lib/email.ts` (the setup email: set the password, how to sign in, quick tips for setting the club up; the club app's
