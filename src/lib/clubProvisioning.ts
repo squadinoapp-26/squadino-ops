@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { seedDefaultDeliveryOptions } from "./merchDefaults";
 
 // Mirrors squadino's own src/lib/clubs.ts (RESERVED_SLUGS/isValidSlug/slugify/
 // codify/createClub) — kept in sync by hand, same as the schema mirror. Ops
@@ -67,6 +68,7 @@ export async function createClub(input: NewClubInput): Promise<CreateClubResult>
           packageId: input.packageId || null,
         },
       });
+      await seedDefaultDeliveryOptions(club.id);
       return { ok: true, club };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";

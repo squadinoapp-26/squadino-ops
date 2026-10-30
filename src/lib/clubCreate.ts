@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { VERSION_MODULES } from "@/lib/modules";
+import { seedDefaultDeliveryOptions } from "@/lib/merchDefaults";
 import { AppVersion } from "@/generated/prisma/enums";
 import { isValidSlug, slugify } from "@/lib/subdomain";
 import { isUnknownEnumValue } from "@/lib/prismaErrors";
@@ -80,6 +81,7 @@ export async function createClub(body: Record<string, unknown>): Promise<CreateR
             typeof body.trialEndsAt === "string" && body.trialEndsAt ? new Date(body.trialEndsAt) : null,
         },
       });
+      await seedDefaultDeliveryOptions(club.id);
       return { ok: true, club };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
