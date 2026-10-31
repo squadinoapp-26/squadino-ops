@@ -253,6 +253,7 @@ model Club {
   bookings             Booking[]
   programmes           Programme[]
   workoutLogs          WorkoutLog[]
+  ladders              Ladder[]
 
   @@map("clubs")
 }
@@ -347,6 +348,7 @@ model User {
   teams                      Team[]               @relation("TeamMembers") // teams this athlete belongs to
   position                   MemberPosition?
   resultsCreated             Result[]             @relation("ResultCreatedBy")
+  laddersCreated             Ladder[]             @relation("LadderCreatedBy")
   resultScorerEntries        ResultScorer[]       @relation("ResultScorerUser") // matches this athlete scored in
   athleteResults             AthleteResult[]      @relation("AthleteResults") // this athlete's personal performance results
   athleteResultsCreated      AthleteResult[]      @relation("AthleteResultCreatedBy")
@@ -1817,6 +1819,7 @@ model Team {
   description String?
   members     User[]   @relation("TeamMembers")
   events      Event[]
+  ladderEntrants LadderEntrant[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -2175,4 +2178,67 @@ model MemberPosition {
 
   @@index([clubId])
   @@map("member_positions")
+}
+
+// ─── LADDERS ────────────────────────────────────────────────────────────────
+// Mirror of the club app's ladder tables (league tables for team sports). Ops
+// shares the database schema but has NO ladder UI — kept here only so the shared
+// schema stays in step (see CLAUDE.md). The club app owns the behaviour.
+model Ladder {
+  id          String          @id @default(cuid())
+  clubId      String
+  club        Club            @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  name        String
+  sport       String?
+  winPoints   Int             @default(3)
+  drawPoints  Int             @default(1)
+  lossPoints  Int             @default(0)
+  bonusPoints Int             @default(0)
+  trackScores Boolean         @default(true)
+  entrants    LadderEntrant[]
+  fixtures    LadderFixture[]
+  createdById String?
+  createdBy   User?           @relation("LadderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([clubId])
+  @@map("ladders")
+}
+
+model LadderEntrant {
+  id           String          @id @default(cuid())
+  ladderId     String
+  ladder       Ladder          @relation(fields: [ladderId], references: [id], onDelete: Cascade)
+  name         String
+  teamId       String?
+  team         Team?           @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  homeFixtures LadderFixture[] @relation("HomeEntrant")
+  awayFixtures LadderFixture[] @relation("AwayEntrant")
+
+  @@unique([ladderId, name])
+  @@index([ladderId])
+  @@map("ladder_entrants")
+}
+
+model LadderFixture {
+  id            String        @id @default(cuid())
+  ladderId      String
+  ladder        Ladder        @relation(fields: [ladderId], references: [id], onDelete: Cascade)
+  homeEntrantId String
+  homeEntrant   LadderEntrant @relation("HomeEntrant", fields: [homeEntrantId], references: [id], onDelete: Cascade)
+  awayEntrantId String
+  awayEntrant   LadderEntrant @relation("AwayEntrant", fields: [awayEntrantId], references: [id], onDelete: Cascade)
+  homeScore     Int?
+  awayScore     Int?
+  outcome       String?
+  bonusHome     Boolean       @default(false)
+  bonusAway     Boolean       @default(false)
+  played        Boolean       @default(true)
+  playedAt      DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([ladderId])
+  @@map("ladder_fixtures")
 }
