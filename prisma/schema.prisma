@@ -334,6 +334,7 @@ model User {
   newsViews           NewsView[]
   eventComments       EventComment[]
   eventRsvps          EventRSVP[]
+  rsvpsConfirmed      EventRSVP[]          @relation("RSVPConfirmedBy")
   marketplaceListings MarketplaceListing[]
   shiftsCreated       Shift[]              @relation("ShiftCreatedBy")
   shiftsApproved      Shift[]              @relation("ShiftApprovedBy")
@@ -1141,6 +1142,10 @@ model EventRSVP {
   user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   guardianshipId String?
   guardianship   Guardianship? @relation(fields: [guardianshipId], references: [id], onDelete: Cascade)
+  // Mirror of the club app: set when a staff member confirmed a player's roster
+  // response on their behalf. Schema only — ops has no attendance UI.
+  confirmedById  String?
+  confirmedBy    User?         @relation("RSVPConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
   status         RSVPStatus
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
